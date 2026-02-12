@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AR Cesta na zemi</title>
+<title>AR Šipka na zemi</title>
 <style>
   body { margin:0; overflow:hidden; background:black; }
   video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
@@ -23,8 +23,9 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
 
 const startBtn = document.getElementById("start");
-let scene, camera, renderer, roadGroup;
-let bearing = 320; // Směr na Krušné hory
+let scene, camera, renderer, arrowGroup;
+let bearing = 320; // Směr na Krušné hory (uprav si podle potřeby)
+const visibilityThreshold = 30; // Tolerance v stupních, kdy šipka zůstane viditelná
 
 startBtn.onclick = async () => {
   if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
@@ -49,41 +50,51 @@ function init() {
   renderer.setPixelRatio(window.devicePixelRatio);
   document.body.appendChild(renderer.domElement);
 
-  roadGroup = new THREE.Group();
-  scene.add(roadGroup);
+  arrowGroup = new THREE.Group();
+  scene.add(arrowGroup);
 
-  // Vytvoření cesty, která vypadá jako pruh na asfaltu
-  const geometry = new THREE.PlaneGeometry(2, 4);
-  geometry.rotateX(-Math.PI / 2); // Položit naplocho
+  // Vytvoření custom geometrie pro šipku (trojúhelník směřující vpřed)
+  const arrowGeometry = new THREE.BufferGeometry();
+  const vertices = new Float32Array([
+    -0.5, 0, -1,  // Levý spodní bod
+    0.5, 0, -1,   // Pravý spodní bod
+    0, 0, 1     // Horní hrot
+  ]);
+  arrowGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+  arrowGeometry.setIndex([0, 1, 2]); // Trojúhelník
+  arrowGeometry.rotateX(-Math.PI / 2); // Položit naplocho na zem
 
   for (let i = 0; i < 20; i++) {
     const material = new THREE.MeshBasicMaterial({ 
-      color: 0x00ffcc, 
+      color: 0x00ffcc,  // Hezká modrozelená
       transparent: true, 
-      opacity: 1 - (i * 0.05) 
+      opacity: 1 - (i * 0.05),  // Postupné blednutí do dálky
+      side: THREE.DoubleSide  // Viditelná z obou stran
     });
-    const segment = new THREE.Mesh(geometry, material);
+    const segment = new THREE.Mesh(arrowGeometry, material);
     
-    // Klíčové nastavení: i * 5 je vzdálenost od tebe
-    // Y = -1.6 je průměrná výška držení telefonu (vzdálenost k zemi)
+    // Pozice: i * 5 je vzdálenost vpřed, Y = -1.6 je výška k zemi
     segment.position.set(0, -1.6, -i * 5); 
-    roadGroup.add(segment);
+    arrowGroup.add(segment);
   }
 
   // Sledování orientace
   window.addEventListener('deviceorientation', (e) => {
     let heading = e.webkitCompassHeading || (360 - e.alpha);
+    heading = (heading + 360) % 360; // Normalizace na 0-360
+    
+    const diff = Math.min(Math.abs(heading - bearing) % 360, 360 - Math.abs(heading - bearing) % 360);
+    arrowGroup.visible = (diff <= visibilityThreshold); // Zmizí, pokud odchylka > threshold
     
     const a = THREE.MathUtils.degToRad(heading);
     const b = THREE.MathUtils.degToRad(e.beta);
     const g = THREE.MathUtils.degToRad(e.gamma);
 
-    // Aby se cesta nepropadala, musíme kameru držet v "nule"
-    // a nechat ji rotovat kolem středu (očí)
+    // Rotace kamery podle zařízení
     camera.rotation.set(b, g, -a, 'YXZ');
     
-    // Celá skupina cesty se natočí podle azimutu cíle
-    roadGroup.rotation.y = THREE.MathUtils.degToRad(-bearing);
+    // Skupina šipky se natočí fixně podle cílového bearing
+    arrowGroup.rotation.y = THREE.MathUtils.degToRad(bearing - heading); // Relativní rotace pro správný směr
   }, true);
 
   animate();
@@ -92,11 +103,11 @@ function init() {
 function animate() {
   requestAnimationFrame(animate);
   
-  // Animace "chůze"
-  roadGroup.children.forEach(seg => {
+  // Animace "chůze" – segmenty se posouvají vpřed
+  arrowGroup.children.forEach(seg => {
     seg.position.z += 0.1; 
     if (seg.position.z > 2) {
-      seg.position.z = -98; // Vrátit na konec řady
+      seg.position.z = -98; // Vrátit na konec řady (20 segmentů * 5 = 100)
     }
   });
 
