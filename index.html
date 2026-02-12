@@ -22,19 +22,22 @@
             position: relative;
             width: 100%;
             height: 100vh;
+            perspective: 1000px; /* perspektiva pro 3D efekt šipky */
         }
 
         video {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            transform: scale(0.9) translateZ(-50px); /* kamera vzdálenější, přirozený pohled */
         }
 
         .arrow {
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%) scale(3) translateZ(300px); 
+            /* větší šipka, vizuálně cca 3m před kamerou */
             font-size: 100px;
             color: red;
             pointer-events: none;
@@ -82,7 +85,7 @@
 
     <header class="header">
         <a href="https://www.facebook.com/T.O.Poutnici" target="_blank">
-            <img src="sipka.png" alt="sipka" class="logo" style="height:50px;">
+            <img src="sipka.png" alt="Logo" class="logo" style="height:50px;">
         </a>
     </header>
 
@@ -93,12 +96,12 @@
 
     <footer class="footer">
         <div class="footer-contacts">
-            <a href="" target="_blank">Facebook</a>
-            <a href="" target="_blank">Web</a>
+            <a href="https://www.facebook.com/T.O.Poutnici" target="_blank">Facebook</a>
+            <a href="https://strelazebrak.cz/chata/" target="_blank">Web</a>
         </div>
         <div class="footer-support-bar">
             Číslo účtu pro podporu: 
-            <strong id="accountNumber" onclick="copyAccount()">00</strong>
+            <strong id="accountNumber" onclick="copyAccount()">2402938869 / 2010</strong>
             <span id="copyMessage" class="copy-message"></span>
         </div>
     </footer>
