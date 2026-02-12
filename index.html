@@ -3,27 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AR Navigace – Krušné hory</title>
+<title>AR Krušnohorský Kompas</title>
 <style>
-  body { margin:0; overflow:hidden; background:black; font-family: sans-serif; }
+  body { margin:0; overflow:hidden; background:black; font-family: -apple-system, sans-serif; }
   video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
   canvas { position:fixed; top:0; left:0; z-index:1; pointer-events: none; }
   #ui {
-    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-    z-index:2; text-align: center; color: white; background: rgba(0,0,0,0.6);
-    padding: 15px; border-radius: 20px; width: 80%;
+    position:fixed; bottom:30px; left:50%; transform:translateX(-50%);
+    z-index:2; text-align: center; color: white; background: rgba(0,0,0,0.7);
+    padding: 20px; border-radius: 25px; width: 85%; backdrop-filter: blur(10px);
   }
   button {
-    padding:15px 30px; background:#e67e22; color:white; border:none;
+    padding:15px 30px; background:#007AFF; color:white; border:none;
     border-radius: 50px; font-size:18px; font-weight: bold; margin-bottom: 10px;
+    box-shadow: 0 4px 15px rgba(0,122,255,0.4);
   }
+  #debug { font-size: 11px; color: #aaa; margin-top: 8px; line-height: 1.4; }
 </style>
 </head>
 <body>
 
 <div id="ui">
-  <button id="start">Spustit navigaci</button>
-  <div id="status">Čekám na start...</div>
+  <button id="start">Spustit AR Navigaci</button>
+  <div id="status">Připraven k vyhledání hor</div>
+  <div id="debug"></div>
 </div>
 <video id="camera" autoplay playsinline></video>
 
@@ -31,17 +34,15 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
 
 const uiStatus = document.getElementById("status");
+const debug = document.getElementById("debug");
 const startBtn = document.getElementById("start");
 
-// Souřadnice Klínovce (Krušné hory)
-const TARGET_COORDS = { lat: 50.395, lon: 12.967 };
-let userCoords = null;
+const KLINOVEC = { lat: 50.395, lon: 12.967 };
 let bearingToTarget = 0;
+let scene, camera, renderer, road;
 
-let scene, camera, renderer, arrow;
-
-// 1. Výpočet azimutu (směru) k cíli
-function calculateBearing(lat1, lon1, lat2, lon2) {
+// Výpočet úhlu k cíli
+function getBearing(lat1, lon1, lat2, lon2) {
   const l1 = lat1 * Math.PI / 180;
   const l2 = lat2 * Math.PI / 180;
   const dl = (lon2 - lon1) * Math.PI / 180;
@@ -50,77 +51,89 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
-// 2. Povolení senzorů a GPS
 startBtn.onclick = async () => {
-  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-    const res = await DeviceOrientationEvent.requestPermission();
-    if (res !== 'granted') return alert("Potřebujeme senzory!");
+  // 1. Žádost o senzory (iOS)
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') {
+        uiStatus.innerText = "Senzory zamítnuty";
+        return;
+      }
+    } catch (e) { debug.innerText = "Chyba senzorů: " + e; }
   }
 
   startBtn.style.display = "none";
-  uiStatus.innerText = "Hledám GPS...";
+  uiStatus.innerText = "Hledám polohu...";
 
-  navigator.geolocation.watchPosition(pos => {
-    userCoords = pos.coords;
-    bearingToTarget = calculateBearing(userCoords.latitude, userCoords.longitude, TARGET_COORDS.lat, TARGET_COORDS.lon);
-    uiStatus.innerText = `Klínovec je cca ${bearingToTarget.toFixed(0)}° od severu`;
-  }, err => {
-    uiStatus.innerText = "GPS nedostupná.";
-  }, { enableHighAccuracy: true });
+  // 2. Start kamery
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(s => { document.getElementById("camera").srcObject = s; })
+    .catch(e => { debug.innerText += "\nKamera nejde (potřebuje HTTPS)"; });
 
-  initAR();
+  // 3. Start GPS
+  navigator.geolocation.watchPosition(
+    pos => {
+      const { latitude, longitude } = pos.coords;
+      bearingToTarget = getBearing(latitude, longitude, KLINOVEC.lat, KLINOVEC.lon);
+      uiStatus.innerText = "Mířím na Klínovec";
+      debug.innerText = `Moje GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}\nÚhel: ${bearingToTarget.toFixed(1)}°`;
+    },
+    err => {
+      uiStatus.innerText = "GPS nedostupná - Demo režim";
+      debug.innerText = "Chyba: " + err.message + "\n(Používám simulovanou polohu z Prahy)";
+      bearingToTarget = getBearing(50.07, 14.43, KLINOVEC.lat, KLINOVEC.lon);
+    },
+    { enableHighAccuracy: true }
+  );
+
+  initThree();
 };
 
-function initAR() {
-  // Kamera (video feed)
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
-    document.getElementById("camera").srcObject = s;
-  });
-
+function initThree() {
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  
   renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  // Vytvoření cesty/šipky
-  const arrowGeo = new THREE.ConeGeometry(0.5, 5, 3); // Trojúhelníková cesta
-  arrowGeo.rotateX(Math.PI / 2); // Položit na zem
-  const arrowMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
-  arrow = new THREE.Mesh(arrowGeo, arrowMat);
-  arrow.position.y = -2; // Pod nohama
-  scene.add(arrow);
+  // Vytvoříme cestu jako dlouhý "koberec" mířící k horám
+  const roadGeo = new THREE.PlaneGeometry(2, 100);
+  roadGeo.rotateX(-Math.PI / 2);
+  roadGeo.translate(0, -1.5, -50); // Posunout před kameru a na zem
 
-  // Pomocné světlo
-  scene.add(new THREE.AmbientLight(0xffffff, 1));
+  const roadMat = new THREE.MeshBasicMaterial({ 
+    color: 0x00ffcc, 
+    transparent: true, 
+    opacity: 0.5,
+    side: THREE.DoubleSide 
+  });
+  
+  road = new THREE.Mesh(roadGeo, roadMat);
+  scene.add(road);
 
-  // Sledování kompasu na iOS
-  window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-  window.addEventListener('deviceorientation', handleOrientation, true);
+  // Přidáme orientační čáry na cestu
+  const grid = new THREE.GridHelper(100, 50, 0x00ffcc, 0x004444);
+  grid.position.y = -1.49;
+  scene.add(grid);
+
+  window.addEventListener('deviceorientation', (e) => {
+    // webkitCompassHeading je klíčový pro iPhone
+    let heading = e.webkitCompassHeading || (360 - e.alpha);
+    
+    const alpha = THREE.MathUtils.degToRad(heading);
+    const beta = THREE.MathUtils.degToRad(e.beta);
+    const gamma = THREE.MathUtils.degToRad(e.gamma);
+
+    // Otáčíme kamerou podle telefonu
+    camera.rotation.set(beta, gamma, -alpha, 'YXZ');
+    
+    // Cesta se v prostoru otočí k cíli
+    road.rotation.y = THREE.MathUtils.degToRad(-bearingToTarget);
+    grid.rotation.y = THREE.MathUtils.degToRad(-bearingToTarget);
+  }, true);
 
   animate();
-}
-
-function handleOrientation(event) {
-  let compass = event.webkitCompassHeading || event.alpha;
-  if (compass === undefined) return;
-
-  // Three.js rotace kamery podle kompasu
-  // Alpha je rotace kolem osy Z (vzhůru)
-  const alpha = THREE.MathUtils.degToRad(compass);
-  const beta = THREE.MathUtils.degToRad(event.beta);
-  const gamma = THREE.MathUtils.degToRad(event.gamma);
-
-  // Nastavíme rotaci scény tak, aby nula byla vždy na Severu
-  // a šipka mířila k vypočítanému azimutu
-  camera.rotation.set(beta, gamma, -alpha, 'YXZ');
-  
-  if (arrow) {
-    // Šipka se otočí směrem k cíli (vzhledem k severu)
-    const targetRad = THREE.MathUtils.degToRad(-bearingToTarget);
-    arrow.rotation.y = targetRad;
-  }
 }
 
 function animate() {
