@@ -3,118 +3,87 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Krušné hory AR Navigace</title>
+<title>AR Cesta na zemi</title>
 <style>
-  body { margin:0; overflow:hidden; background:black; font-family: -apple-system, sans-serif; }
+  body { margin:0; overflow:hidden; background:black; }
   video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
-  canvas { position:fixed; top:0; left:0; z-index:1; pointer-events: none; }
-  #ui {
-    position:fixed; bottom:30px; left:50%; transform:translateX(-50%);
-    z-index:2; text-align: center; color: white; background: rgba(0,0,0,0.8);
-    padding: 20px; border-radius: 20px; width: 80%; backdrop-filter: blur(10px);
-    border: 1px solid rgba(255,255,255,0.2);
+  canvas { position:fixed; top:0; left:0; z-index:1; }
+  #start {
+    position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+    z-index:2; padding:20px; background:#2ecc71; color:white; border:none; border-radius:10px; font-size:20px;
   }
-  button {
-    padding:16px 32px; background:#2ecc71; color:white; border:none;
-    border-radius: 50px; font-size:18px; font-weight: bold; cursor: pointer;
-  }
-  #info { margin-top: 10px; font-size: 14px; color: #2ecc71; font-weight: bold; }
-  #log { font-size: 10px; color: #888; margin-top: 5px; }
 </style>
 </head>
 <body>
 
-<div id="ui">
-  <button id="start">AKTIVOVAT NAVIGACI</button>
-  <div id="info">popisek 1</div>
-  <div id="log">Čekám na senzory...</div>
-</div>
+<button id="start">SPUSTIT AR</button>
 <video id="camera" autoplay playsinline></video>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
 
-const log = document.getElementById("log");
-const info = document.getElementById("info");
 const startBtn = document.getElementById("start");
-
-const KLINOVEC = { lat: 50.395, lon: 12.967 };
-let bearingToTarget = 0;
-let scene, camera, renderer, arrowGroup;
-
-// Výpočet azimutu
-function getBearing(lat1, lon1, lat2, lon2) {
-  const l1 = lat1 * Math.PI / 180;
-  const l2 = lat2 * Math.PI / 180;
-  const dl = (lon2 - lon1) * Math.PI / 180;
-  const y = Math.sin(dl) * Math.cos(l2);
-  const x = Math.cos(l1) * Math.sin(l2) - Math.sin(l1) * Math.cos(l2) * Math.cos(dl);
-  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-}
+let scene, camera, renderer, roadGroup;
+let bearing = 320; // Směr na Krušné hory
 
 startBtn.onclick = async () => {
-  // Žádost o senzory (iOS)
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    const res = await DeviceOrientationEvent.requestPermission();
-    if (res !== 'granted') { log.innerText = "Senzory zamítnuty."; return; }
+  if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
+    await DeviceOrientationEvent.requestPermission();
   }
-
   startBtn.style.display = "none";
-  
-  // Start GPS se zvýšenou tolerancí pro Safari
-  navigator.geolocation.watchPosition(
-    pos => {
-      bearingToTarget = getBearing(pos.coords.latitude, pos.coords.longitude, KLINOVEC.lat, KLINOVEC.lon);
-      log.innerText = `GPS OK | Úhel: ${bearingToTarget.toFixed(1)}°`;
-    },
-    err => {
-      log.innerText = "GPS Error: " + err.message + " (Zkuste jít k oknu)";
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
-
-  // Kamera
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(s => { document.getElementById("camera").srcObject = s; })
-    .catch(e => log.innerText = "Kamera nedostupná.");
-
-  initThree();
+  init();
 };
 
-function initThree() {
+function init() {
+  // Kamera telefonu (pozadí)
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(s => document.getElementById("camera").srcObject = s);
+
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  
+  // Zúžení zorného pole (FOV) na 60 pomůže objektům "sedět" lépe na obraze z kamery
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+  
   renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
   document.body.appendChild(renderer.domElement);
 
-  // Vytvoření naváděcí cesty (šipky v řadě)
-  arrowGroup = new THREE.Group();
-  for(let i=0; i<10; i++) {
-    const geo = new THREE.ConeGeometry(0.4, 1.2, 4);
-    geo.rotateX(Math.PI / 2);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 1 - (i*0.1) });
-    const cone = new THREE.Mesh(geo, mat);
-    cone.position.z = -5 - (i * 4); // Cesta vede od nás do dálky
-    cone.position.y = -1.5;
-    arrowGroup.add(cone);
-  }
-  scene.add(arrowGroup);
+  roadGroup = new THREE.Group();
+  scene.add(roadGroup);
 
-  window.addEventListener('deviceorientation', (e) => {
-    // Pro iOS je klíčové webkitCompassHeading
-    let heading = e.webkitCompassHeading || (360 - e.alpha);
-    if (!heading) return;
+  // Vytvoření cesty, která vypadá jako pruh na asfaltu
+  const geometry = new THREE.PlaneGeometry(2, 4);
+  geometry.rotateX(-Math.PI / 2); // Položit naplocho
 
-    const alpha = THREE.MathUtils.degToRad(heading);
-    const beta = THREE.MathUtils.degToRad(e.beta);
-    const gamma = THREE.MathUtils.degToRad(e.gamma);
-
-    // Orientace kamery
-    camera.rotation.set(beta, gamma, -alpha, 'YXZ');
+  for (let i = 0; i < 20; i++) {
+    const material = new THREE.MeshBasicMaterial({ 
+      color: 0x00ffcc, 
+      transparent: true, 
+      opacity: 1 - (i * 0.05) 
+    });
+    const segment = new THREE.Mesh(geometry, material);
     
-    // Celá cesta se otočí směrem ke Krušným horám
-    arrowGroup.rotation.y = THREE.MathUtils.degToRad(-bearingToTarget);
+    // Klíčové nastavení: i * 5 je vzdálenost od tebe
+    // Y = -1.6 je průměrná výška držení telefonu (vzdálenost k zemi)
+    segment.position.set(0, -1.6, -i * 5); 
+    roadGroup.add(segment);
+  }
+
+  // Sledování orientace
+  window.addEventListener('deviceorientation', (e) => {
+    let heading = e.webkitCompassHeading || (360 - e.alpha);
+    
+    const a = THREE.MathUtils.degToRad(heading);
+    const b = THREE.MathUtils.degToRad(e.beta);
+    const g = THREE.MathUtils.degToRad(e.gamma);
+
+    // Aby se cesta nepropadala, musíme kameru držet v "nule"
+    // a nechat ji rotovat kolem středu (očí)
+    camera.rotation.set(b, g, -a, 'YXZ');
+    
+    // Celá skupina cesty se natočí podle azimutu cíle
+    roadGroup.rotation.y = THREE.MathUtils.degToRad(-bearing);
   }, true);
 
   animate();
@@ -122,11 +91,15 @@ function initThree() {
 
 function animate() {
   requestAnimationFrame(animate);
-  // Jemná animace pohybu cesty, aby to vypadalo živě
-  arrowGroup.children.forEach((cone, i) => {
-    cone.position.z += 0.05;
-    if (cone.position.z > -2) cone.position.z = -42;
+  
+  // Animace "chůze"
+  roadGroup.children.forEach(seg => {
+    seg.position.z += 0.1; 
+    if (seg.position.z > 2) {
+      seg.position.z = -98; // Vrátit na konec řady
+    }
   });
+
   renderer.render(scene, camera);
 }
 </script>
