@@ -6,22 +6,24 @@
     <title>AR Kompas - Krušné hory</title>
     <style>
         :root {
-            --ui-green: #76ff4d; /* Ten přesný odstín ze screenshotu */
-            --bg-dark: #0a110a;
+            --ui-green: #5eff5e;
+            --bg-vector: #000000;
+            --circle-vector: rgba(26, 38, 21, 0.8);
+            --circle-ar: rgba(255, 255, 255, 0.85);
         }
 
         body {
             margin: 0;
-            background-color: #000;
+            background-color: var(--bg-vector);
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             height: 100vh;
             color: white;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             overflow: hidden;
             user-select: none;
+            transition: background-color 0.3s;
         }
 
         #video-background {
@@ -35,141 +37,162 @@
             display: none;
         }
 
-        /* Horní lišta s tečkami */
+        /* Horní kompasová lišta */
         #top-bar {
             position: absolute;
-            top: 60px;
+            top: 50px;
             width: 100%;
-            overflow: hidden;
             height: 30px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
             z-index: 10;
         }
 
         #top-indicator {
-            position: absolute;
-            left: 50%;
             display: flex;
             align-items: center;
             gap: 15px;
-            transform: translateX(-50%);
-            transition: transform 0.1s ease-out;
-            font-size: 14px;
+            white-space: nowrap;
+            font-size: 18px;
             color: white;
+            transition: transform 0.1s linear;
         }
 
-        .marker-triangle { color: var(--ui-green); font-size: 22px; }
-        .marker-dot { color: var(--ui-green); font-size: 24px; }
-        .marker-small { opacity: 0.8; }
+        #top-indicator span.symbol {
+            font-size: 22px;
+            color: var(--ui-green);
+        }
 
-        /* Hlavní kruh */
+        /* Centrální prvek */
+        #main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+
         #compass-circle {
-            width: 250px;
-            height: 250px;
-            background-color: rgba(20, 35, 20, 0.5); /* Tmavě zelený průhledný kruh */
+            width: 260px;
+            height: 260px;
+            background-color: var(--circle-vector);
             border-radius: 50%;
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 5;
-            backdrop-filter: blur(2px);
+            transition: background-color 0.3s;
         }
 
         #arrow-pivot {
             position: absolute;
-            width: 100%;
-            height: 100%;
+            width: 60px;
+            height: 100px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            transition: transform 0.1s ease-out;
+            justify-content: flex-start;
+            bottom: 50%; /* Pivot point v centru */
+            transform-origin: bottom center;
+            transition: transform 0.1s linear;
         }
 
         .arrow-head {
             width: 0;
             height: 0;
-            border-left: 28px solid transparent;
-            border-right: 28px solid transparent;
-            border-bottom: 50px solid var(--ui-green);
-            margin-bottom: 10px; /* Mezera mezi šipkou a tečkou */
+            border-left: 35px solid transparent;
+            border-right: 35px solid transparent;
+            border-bottom: 65px solid var(--ui-green);
+            margin-bottom: 5px;
         }
 
         #center-dot {
-            width: 12px;
-            height: 12px;
+            width: 16px;
+            height: 16px;
             background-color: var(--ui-green);
             border-radius: 50%;
+            z-index: 10;
         }
 
-        /* Tlačítko uprostřed */
-        #btn-activate {
-            position: absolute;
-            bottom: 35%;
-            background: rgba(40, 60, 40, 0.4);
-            border: 1px solid rgba(118, 255, 77, 0.3);
+        /* Tlačítko Aktivovat */
+        #btn-start {
+            margin-top: 30px;
+            padding: 8px 40px;
+            background: rgba(255, 255, 255, 0.1);
             color: var(--ui-green);
-            padding: 8px 30px;
+            border: 1px solid rgba(94, 255, 94, 0.3);
             border-radius: 20px;
-            font-size: 13px;
-            text-transform: lowercase;
+            font-size: 14px;
             cursor: pointer;
-            z-index: 15;
+            backdrop-filter: blur(5px);
+            z-index: 20;
         }
 
-        /* Spodní info panel */
-        #bottom-info {
+        /* Spodní info sekce */
+        #bottom-ui {
             position: absolute;
             bottom: 40px;
             width: 90%;
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            z-index: 10;
+            z-index: 20;
         }
 
-        .text-group h2 {
-            margin: 0;
-            font-weight: 400;
-            font-size: 24px;
-            color: white;
+        .location-info {
+            display: flex;
+            flex-direction: column;
         }
 
-        .text-group h1 {
-            margin: 0;
-            font-weight: 500;
+        .location-info .label {
+            font-size: 28px;
+            font-weight: 300;
+        }
+
+        .location-info .target {
             font-size: 28px;
             color: var(--ui-green);
+            font-weight: 500;
         }
 
-        /* Posuvník vpravo dole */
-        .slider-container {
-            width: 120px;
-            height: 10px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+        /* Toggle Switch */
+        .switch {
             position: relative;
-            margin-bottom: 10px;
+            display: inline-block;
+            width: 110px;
+            height: 18px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
         }
 
-        .slider-thumb {
-            width: 10px;
-            height: 10px;
-            background: var(--ui-green);
+        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            transition: .4s;
+            border-radius: 10px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 2px;
+            bottom: 2px;
+            background-color: var(--ui-green);
+            transition: .4s;
             border-radius: 50%;
-            position: absolute;
-            left: 0;
         }
 
-        /* Ovládací prvky skryté pro čistý vizuál */
-        #cam-toggle {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            opacity: 0.3;
-            color: white;
-            z-index: 100;
+        input:checked + .slider:before {
+            transform: translateX(92px);
         }
+
     </style>
 </head>
 <body>
@@ -178,101 +201,98 @@
 
 <div id="top-bar">
     <div id="top-indicator">
-        <span class="marker-small">|</span>
-        <span class="marker-triangle">▲</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
-        <span class="marker-dot">●</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
-        <span class="marker-small">|</span>
+        <span>I</span><span class="symbol">▲</span><span>I</span><span>I</span><span>I</span><span>I</span><span>I</span><span class="symbol">●</span><span>I</span><span>I</span><span>I</span><span>I</span><span>I</span><span>I</span><span>I</span>
     </div>
 </div>
 
-<div id="compass-circle">
-    <div id="arrow-pivot">
-        <div class="arrow-head"></div>
+<div id="main-container">
+    <div id="compass-circle">
+        <div id="arrow-pivot">
+            <div class="arrow-head"></div>
+        </div>
         <div id="center-dot"></div>
     </div>
+    <button id="btn-start">Aktivovat směr</button>
 </div>
 
-<button id="btn-activate">Aktivovat směr</button>
-
-<div id="bottom-info">
-    <div class="text-group">
-        <h2>Navštivte</h2>
-        <h1>Krušné hory</h1>
+<div id="bottom-ui">
+    <div class="location-info">
+        <span class="label">Navštivte</span>
+        <span class="target">Krušné hory</span>
     </div>
-    <div class="slider-container">
-        <div class="slider-thumb"></div>
-    </div>
+    
+    <label class="switch">
+        <input type="checkbox" id="mode-toggle">
+        <span class="slider"></span>
+    </label>
 </div>
-
-<div id="cam-toggle">📷</div>
 
 <script>
     const arrowPivot = document.getElementById('arrow-pivot');
     const topIndicator = document.getElementById('top-indicator');
-    const btnActivate = document.getElementById('btn-activate');
-    const camToggle = document.getElementById('cam-toggle');
+    const btnStart = document.getElementById('btn-start');
+    const modeToggle = document.getElementById('mode-toggle');
     const video = document.getElementById('video-background');
+    const compassCircle = document.getElementById('compass-circle');
 
     let cameraActive = false;
+    let stream = null;
 
-    // --- Kompas ---
+    // --- Logika orientace ---
     function updateOrientation(event) {
         let heading = event.webkitCompassHeading || (360 - event.alpha);
         if (heading !== undefined) {
-            // Hlavní velká šipka
+            // Rotace šipky
             arrowPivot.style.transform = `rotate(${-heading}deg)`;
-            
-            // Horní lišta (posun podle rotace)
-            let moveX = ((heading % 360) - 180) * 2; 
-            topIndicator.style.transform = `translateX(calc(-50% - ${moveX}px))`;
+            // Pohyb horní lišty
+            let moveX = ((heading % 360) - 180) * 1.5;
+            topIndicator.style.transform = `translateX(${-moveX}px)`;
         }
     }
 
-    // --- Kamera ---
-    async function toggleCamera() {
-        if (!cameraActive) {
+    // --- Přepínání Režimů ---
+    async function toggleMode() {
+        if (modeToggle.checked) {
+            // Zapnout Kameru (Foto režim)
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" }, 
-                    audio: false 
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" },
+                    audio: false
                 });
                 video.srcObject = stream;
                 video.style.display = 'block';
-                cameraActive = true;
+                compassCircle.style.backgroundColor = "rgba(255, 255, 255, 0.8)";
             } catch (err) {
-                console.error("Kamera nefunguje:", err);
+                alert("Kamera není dostupná.");
+                modeToggle.checked = false;
             }
+        } else {
+            // Vypnout Kameru (Vektor režim)
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            video.style.display = 'none';
+            compassCircle.style.backgroundColor = "rgba(26, 38, 21, 0.8)";
         }
     }
 
-    // --- Start po kliknutí na tlačítko ---
-    btnActivate.addEventListener('click', async () => {
+    // --- Inicializace ---
+    async function init() {
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
             const permission = await DeviceOrientationEvent.requestPermission();
             if (permission === 'granted') {
                 window.addEventListener('deviceorientation', updateOrientation);
-                toggleCamera();
-                btnActivate.style.opacity = "0.5";
-                btnActivate.innerText = "aktivováno";
+                btnStart.style.opacity = '0.5';
+                btnStart.innerText = 'Senzory aktivní';
             }
         } else {
             window.addEventListener('deviceorientation', updateOrientation);
-            toggleCamera();
-            btnActivate.style.opacity = "0.5";
+            btnStart.style.opacity = '0.5';
         }
-    });
+    }
 
-    camToggle.addEventListener('click', toggleCamera);
+    btnStart.addEventListener('click', init);
+    modeToggle.addEventListener('change', toggleMode);
 </script>
 </body>
 </html>
