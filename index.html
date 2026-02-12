@@ -2,41 +2,29 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Krušné hory – kamera AR</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Krušné hory AR – Procházka</title>
 <style>
-  body { margin:0; overflow:hidden; background:black; }
-  video { 
-    position:fixed; 
-    top:0; 
-    left:0; 
-    width:100vw; 
-    height:100vh; 
-    object-fit:cover;
-    z-index:0;
+  body { margin:0; overflow:hidden; background:black; font-family: sans-serif; }
+  video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
+  canvas { position:fixed; top:0; left:0; z-index:1; pointer-events: none; }
+  #overlay {
+    position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+    z-index:2; text-align: center; width: 80%;
   }
-  canvas { 
-    position:fixed; 
-    top:0; 
-    left:0; 
-    z-index:1;
-  }
-  #start {
-    position:fixed;
-    top:50%;
-    left:50%;
-    transform:translate(-50%, -50%);
-    z-index:2;
-    padding:15px 25px;
-    background:white;
-    border:none;
-    font-size:18px;
+  button {
+    padding:15px 30px; background:#2ecc71; color:white; border:none;
+    border-radius: 50px; font-size:18px; font-weight: bold; cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
   }
 </style>
 </head>
 <body>
 
-<button id="start">Spustit krajinu</button>
+<div id="overlay">
+  <button id="start">Vstoupit do krajiny</button>
+  <p style="color:white; margin-top:10px;">Povolte přístup k fotoaparátu a senzorům</p>
+</div>
 <video id="camera" autoplay playsinline></video>
 
 <script type="module">
@@ -44,84 +32,108 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.mod
 
 const video = document.getElementById("camera");
 const startBtn = document.getElementById("start");
+const overlay = document.getElementById("overlay");
 
 let scene, camera, renderer, mountains;
 
+// Funkce pro aktivaci senzorů na iOS
+async function requestPermissions() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    const response = await DeviceOrientationEvent.requestPermission();
+    if (response !== 'granted') {
+      alert('Bez přístupu k senzorům nebude AR fungovat.');
+      return false;
+    }
+  }
+  return true;
+}
+
 startBtn.onclick = async () => {
+  const granted = await requestPermissions();
+  if (!granted) return;
 
-  startBtn.style.display = "none";
+  overlay.style.display = "none";
 
-  // Kamera
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "environment" },
-    audio: false
-  });
-  video.srcObject = stream;
+  // Spuštění kamery
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false
+    });
+    video.srcObject = stream;
+  } catch (err) {
+    console.error("Chyba kamery:", err);
+  }
 
   initThree();
+  setupOrientation();
   animate();
 };
 
 function initThree() {
-
   scene = new THREE.Scene();
+  
+  // Přidáme mlhu pro pocit hloubky
+  scene.fog = new THREE.FogExp2(0x000000, 0.15);
 
-  camera = new THREE.PerspectiveCamera(
-    70,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    100
-  );
-  camera.position.z = 3;
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  // Pozice kamery (tvoje oči)
+  camera.position.set(0, 0, 0);
 
-  renderer = new THREE.WebGLRenderer({ alpha:true });
+  renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(2,5,5);
+  const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
   scene.add(light);
 
   mountains = createMountains();
+  // Posuneme hory pod nás
+  mountains.position.y = -2; 
   scene.add(mountains);
-
-  // gyroskop
-  window.addEventListener("deviceorientation", (event) => {
-    if(event.beta !== null){
-      mountains.rotation.x = event.beta * 0.005;
-      mountains.rotation.y = event.gamma * 0.005;
-    }
-  });
 }
 
 function createMountains(){
-
-  const geometry = new THREE.PlaneGeometry(5,5,100,100);
+  // Uděláme krajinu mnohem větší (50x50)
+  const geometry = new THREE.PlaneGeometry(60, 60, 128, 128);
   geometry.rotateX(-Math.PI/2);
 
   const pos = geometry.attributes.position;
-
-  for(let i=0;i<pos.count;i++){
+  for(let i=0; i<pos.count; i++){
     const x = pos.getX(i);
     const z = pos.getZ(i);
 
-    const height =
-      Math.sin(x*2)*0.4 +
-      Math.cos(z*1.5)*0.3 +
-      Math.random()*0.1;
-
-    pos.setY(i,height);
+    // Perlinův šum (jednoduchá verze přes sin/cos) pro Krušné hory
+    const height = 
+      Math.sin(x * 0.3) * 0.8 + 
+      Math.cos(z * 0.3) * 0.8 + 
+      Math.sin(x * 0.8 + z * 0.8) * 0.4;
+    
+    pos.setY(i, height);
   }
-
   geometry.computeVertexNormals();
 
   const material = new THREE.MeshStandardMaterial({
-    color:0x4f6b5a,
-    roughness:1,
-    metalness:0
+    color: 0x3a5a40,
+    wireframe: false, // Zkus přepnout na true pro sci-fi efekt
+    flatShading: true
   });
 
   return new THREE.Mesh(geometry, material);
+}
+
+function setupOrientation() {
+  window.addEventListener("deviceorientation", (event) => {
+    // Převod orientace telefonu na rotaci Three.js kamery
+    // Alpha = kolem osy Z, Beta = kolem osy X, Gamma = kolem osy Y
+    const alpha = event.alpha ? THREE.MathUtils.degToRad(event.alpha) : 0;
+    const beta = event.beta ? THREE.MathUtils.degToRad(event.beta) : 0;
+    const gamma = event.gamma ? THREE.MathUtils.degToRad(event.gamma) : 0;
+
+    // Jednoduchý orientační model pro AR (v reálu by se použil Sensor API nebo Quaternion)
+    camera.rotation.set(beta, gamma, alpha, 'YXZ');
+  });
 }
 
 function animate(){
@@ -129,7 +141,13 @@ function animate(){
   renderer.render(scene, camera);
 }
 
-</script>
+// Responzivita při otočení telefonu
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
+</script>
 </body>
 </html>
