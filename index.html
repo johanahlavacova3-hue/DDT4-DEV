@@ -3,130 +3,209 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AR Šipka na zemi</title>
+<title>AR Šipka na podlaze</title>
 <style>
-  body { margin:0; overflow:hidden; background:black; }
-  video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
-  canvas { position:fixed; top:0; left:0; z-index:1; }
-  #start {
-    position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
-    z-index:2; padding:20px; background:#2ecc71; color:white; border:none; border-radius:10px; font-size:20px;
+  body { margin: 0; overflow: hidden; background: black; font-family: sans-serif; }
+  /* Video na pozadí */
+  video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; }
+  /* Canvas pro 3D */
+  canvas { position: fixed; top: 0; left: 0; z-index: 1; pointer-events: none; }
+  
+  /* UI Prvky */
+  #overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    pointer-events: none; /* Aby šlo klikat skrz, kde nejsou tlačítka */
   }
-  #place {
-    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-    z-index:2; padding:10px; background:#3498db; color:white; border:none; border-radius:5px; font-size:16px;
-    display:none;
+
+  button {
+    pointer-events: auto;
+    background: rgba(255, 59, 48, 0.9); /* Apple Red */
+    color: white; border: none; border-radius: 30px;
+    padding: 15px 30px; font-size: 18px; font-weight: bold;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    transition: transform 0.1s;
+  }
+  button:active { transform: scale(0.95); }
+
+  #start { margin-bottom: 20px; }
+  #place { display: none; position: absolute; bottom: 50px; background: #007aff; }
+  
+  #info {
+    position: absolute; top: 20px; width: 100%; text-align: center; color: white;
+    text-shadow: 0 1px 3px black; font-size: 14px; opacity: 0.8; display: none;
   }
 </style>
 </head>
 <body>
 
-<button id="start">SPUSTIT aAR</button>
-<button id="place">UMÍSTIT ŠIPKU</button>
-<video id="camera" autoplay playsinline></video>
+<video id="camera" autoplay playsinline muted></video>
+
+<div id="overlay">
+  <div id="info">Otáčej telefonem a namiř na podlahu</div>
+  <button id="start">POVOLIT KAMERU A POHYB</button>
+  <button id="place">UMÍSTIT ŠIPKU (3m)</button>
+</div>
 
 <script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+// Importujeme oficiální ovládání pro mobily
+import { DeviceOrientationControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/DeviceOrientationControls.js';
 
 const startBtn = document.getElementById("start");
 const placeBtn = document.getElementById("place");
-let scene, camera, renderer, arrow;
+const infoTxt = document.getElementById("info");
+
+let scene, camera, renderer, controls;
+let arrowMesh;
 let placed = false;
-const groundHeight = -1.6; // Výška země pod kamerou (předpokládaná výška očí)
+
+// Výška "očí" nad zemí. Pokud držíš mobil před sebou, je to cca 1.5m
+const CAMERA_HEIGHT = 1.5; 
 
 startBtn.onclick = async () => {
-  if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
-    await DeviceOrientationEvent.requestPermission();
+  // 1. Vyžádání povolení pro iOS 13+ (Senzory pohybu)
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const permissionState = await DeviceOrientationEvent.requestPermission();
+      if (permissionState !== 'granted') {
+        alert("Pro AR je potřeba povolit přístup k senzorům pohybu.");
+        return;
+      }
+    } catch (e) {
+      console.error(e);
+    }
   }
+
   startBtn.style.display = "none";
   placeBtn.style.display = "block";
+  infoTxt.style.display = "block";
+  
   init();
 };
 
 function init() {
-  // Kamera telefonu (pozadí)
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(s => document.getElementById("camera").srcObject = s);
+  // 2. Kamera telefonu na pozadí
+  const video = document.getElementById("camera");
+  navigator.mediaDevices.getUserMedia({ 
+    video: { facingMode: "environment" }, 
+    audio: false 
+  }).then(stream => {
+    video.srcObject = stream;
+  }).catch(e => alert("Chyba kamery: " + e));
 
+  // 3. Three.js Scéna
   scene = new THREE.Scene();
-  
-  // Zúžení zorného pole (FOV) na 60 pomůže objektům "sedět" lépe na obraze z kamery
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
   
   renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
   document.body.appendChild(renderer.domElement);
 
-  // Sledování orientace
-  window.addEventListener('deviceorientation', (e) => {
-    let heading = e.webkitCompassHeading || (360 - e.alpha);
-    heading = (heading + 360) % 360; // Normalizace na 0-360
-    
-    const a = THREE.MathUtils.degToRad(heading);
-    const b = THREE.MathUtils.degToRad(e.beta);
-    const g = THREE.MathUtils.degToRad(e.gamma);
+  // Světlo (aby byla 3D šipka vidět stínovaná)
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambientLight);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+  dirLight.position.set(0, 10, 5);
+  scene.add(dirLight);
 
-    // Rotace kamery podle zařízení
-    camera.rotation.order = 'YXZ';
-    camera.rotation.y = g;
-    camera.rotation.x = b;
-    camera.rotation.z = -a;
-  }, true);
-
+  // 4. Ovládání orientace (Gyroskop)
+  controls = new DeviceOrientationControls(camera);
+  
   placeBtn.onclick = placeArrow;
-
+  
+  window.addEventListener('resize', onWindowResize, false);
   animate();
 }
 
-function createArrow() {
-  const arrowGeometry = new THREE.BufferGeometry();
-  const vertices = new Float32Array([
-    -0.5, 0, -1,  // Levý spodní bod
-    0.5, 0, -1,   // Pravý spodní bod
-    0, 0, 1     // Horní hrot
-  ]);
-  arrowGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-  arrowGeometry.setIndex([0, 1, 2]); // Trojúhelník
-  arrowGeometry.rotateX(-Math.PI / 2); // Položit naplocho na zem
+function create3DArrow() {
+  const group = new THREE.Group();
 
-  const material = new THREE.MeshBasicMaterial({ 
-    color: 0xff0000,  // Červená jako na obrázku
-    side: THREE.DoubleSide
-  });
-  const mesh = new THREE.Mesh(arrowGeometry, material);
-  mesh.scale.set(2, 2, 2); // Větší pro lepší viditelnost
-  return mesh;
+  // Materiál - Červená, trochu lesklá
+  const material = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.4 });
+
+  // Noha šipky (Válec)
+  // RadiusTop, RadiusBottom, Height, Segments
+  const shaftGeo = new THREE.CylinderGeometry(0.15, 0.15, 1.5, 32);
+  const shaft = new THREE.Mesh(shaftGeo, material);
+  // Posuneme válec tak, aby jeho střed nebyl v 0,0,0, ale aby začínal "za" špičkou
+  shaft.position.y = -0.75; 
+  
+  // Hlava šipky (Kužel)
+  const headGeo = new THREE.ConeGeometry(0.4, 0.8, 32);
+  const head = new THREE.Mesh(headGeo, material);
+  head.position.y = 0.4; // Posuneme kužel trochu dopředu
+
+  group.add(shaft);
+  group.add(head);
+
+  // Celou šipku otočíme a položíme
+  // V základu v Three.js Y míří nahoru. My chceme aby ležela na zemi (XZ rovina)
+  // a mířila směrem -Z (dopředu).
+  group.rotation.x = -Math.PI / 2; // Položit na placato
+  
+  // Přidáme ještě "stín" pod šipku (průhledné černé kolečko), vypadá to lépe na podlaze
+  const shadowGeo = new THREE.CircleGeometry(0.8, 32);
+  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0.3, transparent: true });
+  const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = -0.05; // Těsně pod šipku
+  
+  const finalObj = new THREE.Group();
+  finalObj.add(group);
+  finalObj.add(shadow);
+  
+  return finalObj;
 }
 
 function placeArrow() {
-  if (placed) return;
+  if (placed && arrowMesh) scene.remove(arrowMesh);
 
-  // Výpočet směru pohledu
-  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-  const normal = new THREE.Vector3(0, 1, 0);
-  const denom = dir.dot(normal);
+  // Vytvoříme šipku
+  arrowMesh = create3DArrow();
 
-  if (denom >= 0) {
-    console.log("Podívejte se dolů na zem pro umístění šipky.");
-    return;
-  }
+  // --- MATEMATIKA UMÍSTĚNÍ ---
+  
+  // 1. Získáme směr, kam se kamera dívá
+  const vector = new THREE.Vector3();
+  camera.getWorldDirection(vector);
+  
+  // Ignorujeme výšku pohledu (y), chceme jen směr v rovině
+  // Chceme šipku 3 metry před námi v horizontálním směru
+  vector.y = 0; 
+  vector.normalize(); 
+  vector.multiplyScalar(3); // 3 metry daleko
 
-  const t = groundHeight / denom; // Protože groundHeight je negativní a denom negativní
-  if (t < 0.1 || t > 20) {
-    console.log("Vzdálenost mimo rozsah.");
-    return;
-  }
+  // 2. Pozice šipky
+  // x, z = podle směru pohledu
+  // y = -CAMERA_HEIGHT (položíme ji na "podlahu" pod kameru)
+  arrowMesh.position.set(vector.x, -CAMERA_HEIGHT, vector.z);
 
-  arrow = createArrow();
-  arrow.position.copy(dir.multiplyScalar(t));
-  scene.add(arrow);
+  // 3. Rotace šipky
+  // Chceme, aby šipka ukazovala stejným směrem, jako jsme se dívali
+  // Vypočítáme úhel natočení podle vektoru pohledu
+  const angle = Math.atan2(vector.x, vector.z);
+  arrowMesh.rotation.y = angle + Math.PI; // Otočíme, aby špička mířila od nás
+
+  scene.add(arrowMesh);
   placed = true;
-  placeBtn.style.display = "none";
+  placeBtn.textContent = "PŘEMÍSTIT ŠIPKU";
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 function animate() {
   requestAnimationFrame(animate);
+  
+  // Aktualizace ovládání podle gyroskopu
+  if(controls) controls.update();
+  
   renderer.render(scene, camera);
 }
 </script>
