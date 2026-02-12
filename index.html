@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kompas Navigace</title>
+    <title>Precizní Kompas</title>
     <style>
         body {
             margin: 0;
@@ -16,145 +16,139 @@
             color: #5eff5e;
             font-family: monospace;
             overflow: hidden;
+            user-select: none;
         }
 
-        /* Horní bar pro orientaci */
-        #top-nav {
+        /* Horní lišta v jednom řádku */
+        #top-bar {
             position: absolute;
-            top: 60px;
-            width: 250px; /* Šířka viditelné zóny kompasu */
-            height: 40px;
-            border-bottom: 1px solid rgba(94, 255, 94, 0.3);
+            top: 40px;
+            width: 100%;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            overflow: visible;
-        }
-
-        #ticks-container {
-            display: flex;
-            gap: 15px;
-            letter-spacing: 5px;
-            font-size: 18px;
-            opacity: 0.5;
-        }
-
-        /* Tenhle trojúhelníček se hýbe vlevo/vpravo */
-        #indicator-triangle {
-            position: absolute;
-            top: -10px;
-            width: 0;
-            height: 0;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-bottom: 12px solid #5eff5e;
-            transition: transform 0.05s linear;
-        }
-
-        #center-dot {
-            margin-top: 10px;
             font-size: 20px;
+            letter-spacing: 8px;
+            white-space: nowrap;
         }
 
-        /* Hlavní rotační prvek */
+        #top-indicator {
+            position: absolute;
+            transition: transform 0.1s linear;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Hlavní kruh */
         #compass-circle {
-            width: 260px;
-            height: 260px;
+            width: 280px;
+            height: 280px;
             background-color: #0d140d;
             border-radius: 50%;
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            position: relative;
         }
 
-        #main-arrow-group {
+        /* Kontejner šipky - rotuje kolem středu */
+        #arrow-pivot {
+            position: absolute;
+            width: 100%;
+            height: 100%;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            transition: transform 0.05s linear;
+            transition: transform 0.1s linear;
         }
 
-        .arrow-up {
+        /* Šipka posunutá nahoru od středu */
+        .arrow-head {
             width: 0;
             height: 0;
-            border-left: 35px solid transparent;
-            border-right: 35px solid transparent;
-            border-bottom: 60px solid #5eff5e;
+            border-left: 30px solid transparent;
+            border-right: 30px solid transparent;
+            border-bottom: 55px solid #5eff5e;
+            transform: translateY(-40px); /* Vzdálenost špičky od středu */
         }
 
-        .dot-middle {
-            width: 12px;
-            height: 12px;
+        /* Fixní středové kolečko */
+        #center-dot {
+            width: 14px;
+            height: 14px;
             background-color: #5eff5e;
             border-radius: 50%;
-            margin-top: 10px;
+            z-index: 10;
         }
 
-        #btn-auth {
+        #btn-start {
             position: absolute;
-            bottom: 40px;
-            padding: 12px 24px;
+            bottom: 60px;
+            padding: 15px 30px;
             background: #5eff5e;
             color: #000;
             border: none;
-            border-radius: 5px;
+            border-radius: 30px;
             font-weight: bold;
-            text-transform: uppercase;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
 
-    <div id="top-nav">
-        <div id="indicator-triangle"></div>
-        <div id="ticks-container">
-            · · · · · ● · · · · ·
+    <div id="top-bar">
+        <div id="top-indicator">
+            <span>·</span><span>▲</span><span>·</span><span>·</span><span>·</span><span>·</span><span>●</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span>
         </div>
     </div>
 
     <div id="compass-circle">
-        <div id="main-arrow-group">
-            <div class="arrow-up"></div>
-            <div class="dot-middle"></div>
+        <div id="arrow-pivot">
+            <div class="arrow-head"></div>
         </div>
+        <div id="center-dot"></div>
     </div>
 
-    <button id="btn-auth">Spustit kompas</button>
+    <button id="btn-start">AKTIVOVAT SENZORY</button>
 
     <script>
-        const mainArrow = document.getElementById('main-arrow-group');
-        const topIndicator = document.getElementById('indicator-triangle');
-        const btn = document.getElementById('btn-auth');
+        const arrowPivot = document.getElementById('arrow-pivot');
+        const topIndicator = document.getElementById('top-indicator');
+        const btn = document.getElementById('btn-start');
 
-        function updateUI(event) {
-            let alpha = event.alpha; // 0 až 360 stupňů
-            if (alpha === null) return;
+        function updateOrientation(event) {
+            // alpha = rotace kolem svislé osy (kompas)
+            // Používáme webkitCompassHeading pro iOS (přesnější sever) nebo alpha
+            let heading = event.webkitCompassHeading || (360 - event.alpha);
+            
+            if (heading !== undefined) {
+                // 1. Šipka míří stále na stejný bod (sever)
+                // Pokud chceš, aby ukazovala na sever, necháme heading. 
+                // Pokud chceš, aby "stála" v prostoru, používáme zápornou hodnotu rotace telefonu.
+                arrowPivot.style.transform = `rotate(${-heading}deg)`;
 
-            // 1. Otáčení hlavní šipky
-            mainArrow.style.transform = `rotate(${-alpha}deg)`;
-
-            // 2. Pohyb horního trojúhelníčku
-            // Mapujeme 360 stupňů na šířku lišty (např. v rozsahu -100px až 100px)
-            // Výpočet: (alpha mod 360) převedeme na posun
-            let shift = ((alpha % 360) - 180) / 1.8; 
-            topIndicator.style.transform = `translateX(${-shift}px)`;
+                // 2. Horní lišta se posouvá vodorovně
+                // Rozsah posunu cca -150px až 150px
+                let moveX = ((heading % 360) - 180) * 0.8;
+                topIndicator.style.transform = `translateX(${moveX}px)`;
+            }
         }
 
-        async function start() {
+        async function init() {
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                const res = await DeviceOrientationEvent.requestPermission();
-                if (res === 'granted') {
-                    window.addEventListener('deviceorientation', updateUI);
+                const permission = await DeviceOrientationEvent.requestPermission();
+                if (permission === 'granted') {
+                    window.addEventListener('deviceorientation', updateOrientation);
                     btn.style.display = 'none';
                 }
             } else {
-                window.addEventListener('deviceorientation', updateUI);
+                window.addEventListener('deviceorientation', updateOrientation);
                 btn.style.display = 'none';
             }
         }
 
-        btn.addEventListener('click', start);
+        btn.addEventListener('click', init);
     </script>
 </body>
 </html>
