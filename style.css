@@ -130,6 +130,11 @@ body.camera-on #compass-circle {
     z-index: 10;
 }
 
+#location-link {
+    text-decoration: none;
+    cursor: pointer;
+}
+
 #location-text { display: flex; flex-direction: column; line-height: 1.1; }
 .label { color: #FFFFFF; font-size: 20pt; font-weight: 400; }
 .place { color: #04DC2B; font-size: 20pt; font-weight: 400; }
