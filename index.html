@@ -1,118 +1,150 @@
-<!DOCTYPE html>
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>AR Šipka na zemi</title>
 <style>
-  body { margin:0; overflow:hidden; background:black; }
-  video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
-  canvas { position:fixed; top:0; left:0; z-index:1; }
-  #start {
-    position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
-    z-index:2; padding:20px; background:#2ecc71; color:white; border:none; border-radius:10px; font-size:20px;
-  }
+body { margin:0; overflow:hidden; }
 </style>
 </head>
 <body>
-
-<button id="start">SPUSTIT AaR</button>
-<video id="camera" autoplay playsinline></video>
-
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
+import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.160/examples/jsm/webxr/ARButton.js';
 
-const startBtn = document.getElementById("start");
-let scene, camera, renderer, arrowGroup;
-let bearing = 320; // Směr na Krušné hory (uprav si podle potřeby)
-const visibilityThreshold = 30; // Tolerance v stupních, kdy šipka zůstane viditelná
-
-startBtn.onclick = async () => {
-  if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
-    await DeviceOrientationEvent.requestPermission();
-  }
-  startBtn.style.display = "none";
-  init();
-};
+let container;
+let camera, scene, renderer;
+let reticle;
+let hitTestSource = null;
+let hitTestSourceRequested = false;
+let arrowMesh;
+let placed = false;
+const visibilityThreshold = 30; // Tolerance v stupních
 
 function init() {
-  // Kamera telefonu (pozadí)
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(s => document.getElementById("camera").srcObject = s);
+container = document.createElement('div');
+document.body.appendChild(container);
 
-  scene = new THREE.Scene();
-  
-  // Zúžení zorného pole (FOV) na 60 pomůže objektům "sedět" lépe na obraze z kamery
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-  
-  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
-  document.body.appendChild(renderer.domElement);
+scene = new THREE.Scene();
+camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+container.appendChild(renderer.domElement);
 
-  arrowGroup = new THREE.Group();
-  scene.add(arrowGroup);
+document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
-  // Vytvoření custom geometrie pro šipku (trojúhelník směřující vpřed)
-  const arrowGeometry = new THREE.BufferGeometry();
-  const vertices = new Float32Array([
-    -0.5, 0, -1,  // Levý spodní bod
-    0.5, 0, -1,   // Pravý spodní bod
-    0, 0, 1     // Horní hrot
-  ]);
-  arrowGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-  arrowGeometry.setIndex([0, 1, 2]); // Trojúhelník
-  arrowGeometry.rotateX(-Math.PI / 2); // Položit naplocho na zem
+const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 3);
+light.position.set(0.5, 1, 0.25);
+scene.add(light);
 
-  for (let i = 0; i < 20; i++) {
-    const material = new THREE.MeshBasicMaterial({ 
-      color: 0x00ffcc,  // Hezká modrozelená
-      transparent: true, 
-      opacity: 1 - (i * 0.05),  // Postupné blednutí do dálky
-      side: THREE.DoubleSide  // Viditelná z obou stran
-    });
-    const segment = new THREE.Mesh(arrowGeometry, material);
-    
-    // Pozice: i * 5 je vzdálenost vpřed, Y = -1.6 je výška k zemi
-    segment.position.set(0, -1.6, -i * 5); 
-    arrowGroup.add(segment);
-  }
+reticle = new THREE.Mesh(
+new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+new THREE.MeshBasicMaterial()
+);
+reticle.matrixAutoUpdate = false;
+reticle.visible = false;
+scene.add(reticle);
 
-  // Sledování orientace
-  window.addEventListener('deviceorientation', (e) => {
-    let heading = e.webkitCompassHeading || (360 - e.alpha);
-    heading = (heading + 360) % 360; // Normalizace na 0-360
-    
-    const diff = Math.min(Math.abs(heading - bearing) % 360, 360 - Math.abs(heading - bearing) % 360);
-    arrowGroup.visible = (diff <= visibilityThreshold); // Zmizí, pokud odchylka > threshold
-    
-    const a = THREE.MathUtils.degToRad(heading);
-    const b = THREE.MathUtils.degToRad(e.beta);
-    const g = THREE.MathUtils.degToRad(e.gamma);
+const controller = renderer.xr.getController(0);
+controller.addEventListener('select', onSelect);
+scene.add(controller);
 
-    // Rotace kamery podle zařízení
-    camera.rotation.set(b, g, -a, 'YXZ');
-    
-    // Skupina šipky se natočí fixně podle cílového bearing
-    arrowGroup.rotation.y = THREE.MathUtils.degToRad(bearing - heading); // Relativní rotace pro správný směr
-  }, true);
-
-  animate();
+window.addEventListener('resize', onWindowResize);
 }
 
-function animate() {
-  requestAnimationFrame(animate);
-  
-  // Animace "chůze" – segmenty se posouvají vpřed
-  arrowGroup.children.forEach(seg => {
-    seg.position.z += 0.1; 
-    if (seg.position.z > 2) {
-      seg.position.z = -98; // Vrátit na konec řady (20 segmentů * 5 = 100)
-    }
-  });
+function createArrow() {
+const group = new THREE.Group();
+const material = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
 
-  renderer.render(scene, camera);
+const shaft = new THREE.Mesh(
+new THREE.CylinderGeometry(0.05, 0.05, 1, 32),
+material
+);
+shaft.position.y = 0.5;
+group.add(shaft);
+
+const head = new THREE.Mesh(
+new THREE.ConeGeometry(0.1, 0.3, 32),
+material
+);
+head.position.y = 1;
+group.add(head);
+
+return group;
 }
+
+function onSelect() {
+if (placed) return;
+if (reticle.visible) {
+arrowMesh = createArrow();
+arrowMesh.matrix.fromArray(reticle.matrix.elements);
+scene.add(arrowMesh);
+placed = true;
+reticle.visible = false;
+}
+}
+
+function onWindowResize() {
+camera.aspect = window.innerWidth / window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function handleVisibility(frame) {
+if (!arrowMesh) return;
+const referenceSpace = renderer.xr.getReferenceSpace();
+const pose = frame.getViewerPose(referenceSpace);
+if (pose) {
+const camPos = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+const arrowPos = new THREE.Vector3().setFromMatrixPosition(arrowMesh.matrixWorld);
+const dirToArrow = arrowPos.clone().sub(camPos).normalize();
+const camForward = new THREE.Vector3();
+camera.getWorldDirection(camForward);
+const dot = dirToArrow.dot(camForward);
+const angle = Math.acos(dot) * 180 / Math.PI;
+arrowMesh.visible = (angle <= visibilityThreshold);
+}
+}
+
+function render(timestamp, frame) {
+if (frame) {
+const referenceSpace = renderer.xr.getReferenceSpace();
+const session = renderer.xr.getSession();
+
+if (hitTestSourceRequested === false) {
+session.requestReferenceSpace('viewer').then((referenceSpace) => {
+session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+hitTestSource = source;
+});
+});
+session.addEventListener('end', () => {
+hitTestSourceRequested = false;
+hitTestSource = null;
+});
+hitTestSourceRequested = true;
+}
+
+if (hitTestSource) {
+const hitTestResults = frame.getHitTestResults(hitTestSource);
+if (hitTestResults.length) {
+const hit = hitTestResults[0];
+reticle.visible = !placed;
+reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
+} else {
+reticle.visible = false;
+}
+}
+
+handleVisibility(frame);
+}
+
+renderer.render(scene, camera);
+}
+
+init();
+renderer.setAnimationLoop(render);
 </script>
 </body>
 </html>
