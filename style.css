@@ -7,7 +7,9 @@ body {
     justify-content: center;
     height: 100vh;
     color: #E2E2E2;
-    font-family: "bc-novatica", sans-serif;
+    font-family: "bc-novatica-cyr", sans-serif;
+    font-weight: 400;
+    font-style: normal;
     overflow: hidden;
     user-select: none;
     touch-action: none;
@@ -22,7 +24,6 @@ body {
     display: none;
 }
 
-/* Rozmazané černé overlaye pro kameru */
 .cam-overlay {
     position: fixed;
     left: 0; width: 100%; height: 120px;
@@ -36,7 +37,6 @@ body {
 
 body.camera-on .cam-overlay { display: block; }
 
-/* Horní lišta */
 #top-bar {
     position: absolute;
     top: 50px;
@@ -55,9 +55,8 @@ body.camera-on .cam-overlay { display: block; }
 
 .tick { font-size: 8px; transform: scaleY(0.5); color: #E2E2E2; }
 .dot-small { font-size: 10px; color: #E2E2E2; }
-.tri-small { font-size: 14px; color: #04DC2B; } /* Zelený trojúhelník nahoře */
+.tri-small { font-size: 14px; color: #04DC2B; }
 
-/* Centrální Kruh */
 #main-ui-container {
     display: flex;
     flex-direction: column;
@@ -78,7 +77,6 @@ body.camera-on .cam-overlay { display: block; }
     transition: background-color 0.3s ease;
 }
 
-/* Režim kamera - změna barvy kruhu */
 body.camera-on #compass-circle {
     background-color: rgba(255, 255, 255, 0.8);
 }
@@ -91,10 +89,8 @@ body.camera-on #compass-circle {
     align-items: center;
 }
 
-/* Rovnostranný trojúhelník */
 .arrow-head {
     width: 0; height: 0;
-    /* Pro rovnostranný: výška = strana * (odmocnina ze 3 / 2) */
     border-left: 27.5px solid transparent;
     border-right: 27.5px solid transparent;
     border-bottom: 47.6px solid #04DC2B; 
@@ -115,8 +111,8 @@ body.camera-on #compass-circle {
     color: #122B17;
     border: none;
     border-radius: 25px;
-    font-family: "bc-novatica", sans-serif;
-    font-size: 6pt; /* Velmi malé tlačítko */
+    font-family: "bc-novatica-cyr", sans-serif;
+    font-size: 6pt;
     font-weight: 400;
     cursor: pointer;
     display: flex;
@@ -124,7 +120,6 @@ body.camera-on #compass-circle {
     justify-content: center;
 }
 
-/* Spodní bar */
 #bottom-bar {
     position: absolute;
     bottom: 35px;
@@ -136,10 +131,9 @@ body.camera-on #compass-circle {
 }
 
 #location-text { display: flex; flex-direction: column; line-height: 1.1; }
-.label { color: #FFFFFF; font-size: 20pt; }
-.place { color: #04DC2B; font-size: 20pt; }
+.label { color: #FFFFFF; font-size: 20pt; font-weight: 400; }
+.place { color: #04DC2B; font-size: 20pt; font-weight: 400; }
 
-/* Přepínač */
 #mode-toggle {
     width: 120px; height: 15px;
     background: rgba(4, 220, 43, 0.2);
