@@ -3,45 +3,46 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AR Krušnohorský Kompas</title>
+<title>Krušné hory AR Navigace</title>
 <style>
   body { margin:0; overflow:hidden; background:black; font-family: -apple-system, sans-serif; }
   video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
   canvas { position:fixed; top:0; left:0; z-index:1; pointer-events: none; }
   #ui {
     position:fixed; bottom:30px; left:50%; transform:translateX(-50%);
-    z-index:2; text-align: center; color: white; background: rgba(0,0,0,0.7);
-    padding: 20px; border-radius: 25px; width: 85%; backdrop-filter: blur(10px);
+    z-index:2; text-align: center; color: white; background: rgba(0,0,0,0.8);
+    padding: 20px; border-radius: 20px; width: 80%; backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.2);
   }
   button {
-    padding:15px 30px; background:#007AFF; color:white; border:none;
-    border-radius: 50px; font-size:18px; font-weight: bold; margin-bottom: 10px;
-    box-shadow: 0 4px 15px rgba(0,122,255,0.4);
+    padding:16px 32px; background:#2ecc71; color:white; border:none;
+    border-radius: 50px; font-size:18px; font-weight: bold; cursor: pointer;
   }
-  #debug { font-size: 11px; color: #aaa; margin-top: 8px; line-height: 1.4; }
+  #info { margin-top: 10px; font-size: 14px; color: #2ecc71; font-weight: bold; }
+  #log { font-size: 10px; color: #888; margin-top: 5px; }
 </style>
 </head>
 <body>
 
 <div id="ui">
-  <button id="start">Spustit AR Navigaci</button>
-  <div id="status">Připraven k vyhledání hor</div>
-  <div id="debug"></div>
+  <button id="start">AKTIVOVAT NAVIGACI</button>
+  <div id="info">Mířím na Klínovec (1244 m)</div>
+  <div id="log">Čekám na senzory...</div>
 </div>
 <video id="camera" autoplay playsinline></video>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
 
-const uiStatus = document.getElementById("status");
-const debug = document.getElementById("debug");
+const log = document.getElementById("log");
+const info = document.getElementById("info");
 const startBtn = document.getElementById("start");
 
 const KLINOVEC = { lat: 50.395, lon: 12.967 };
 let bearingToTarget = 0;
-let scene, camera, renderer, road;
+let scene, camera, renderer, arrowGroup;
 
-// Výpočet úhlu k cíli
+// Výpočet azimutu
 function getBearing(lat1, lon1, lat2, lon2) {
   const l1 = lat1 * Math.PI / 180;
   const l2 = lat2 * Math.PI / 180;
@@ -52,40 +53,30 @@ function getBearing(lat1, lon1, lat2, lon2) {
 }
 
 startBtn.onclick = async () => {
-  // 1. Žádost o senzory (iOS)
+  // Žádost o senzory (iOS)
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    try {
-      const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission !== 'granted') {
-        uiStatus.innerText = "Senzory zamítnuty";
-        return;
-      }
-    } catch (e) { debug.innerText = "Chyba senzorů: " + e; }
+    const res = await DeviceOrientationEvent.requestPermission();
+    if (res !== 'granted') { log.innerText = "Senzory zamítnuty."; return; }
   }
 
   startBtn.style.display = "none";
-  uiStatus.innerText = "Hledám polohu...";
-
-  // 2. Start kamery
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(s => { document.getElementById("camera").srcObject = s; })
-    .catch(e => { debug.innerText += "\nKamera nejde (potřebuje HTTPS)"; });
-
-  // 3. Start GPS
+  
+  // Start GPS se zvýšenou tolerancí pro Safari
   navigator.geolocation.watchPosition(
     pos => {
-      const { latitude, longitude } = pos.coords;
-      bearingToTarget = getBearing(latitude, longitude, KLINOVEC.lat, KLINOVEC.lon);
-      uiStatus.innerText = "Mířím na Klínovec";
-      debug.innerText = `Moje GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}\nÚhel: ${bearingToTarget.toFixed(1)}°`;
+      bearingToTarget = getBearing(pos.coords.latitude, pos.coords.longitude, KLINOVEC.lat, KLINOVEC.lon);
+      log.innerText = `GPS OK | Úhel: ${bearingToTarget.toFixed(1)}°`;
     },
     err => {
-      uiStatus.innerText = "GPS nedostupná - Demo režim";
-      debug.innerText = "Chyba: " + err.message + "\n(Používám simulovanou polohu z Prahy)";
-      bearingToTarget = getBearing(50.07, 14.43, KLINOVEC.lat, KLINOVEC.lon);
+      log.innerText = "GPS Error: " + err.message + " (Zkuste jít k oknu)";
     },
-    { enableHighAccuracy: true }
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
+
+  // Kamera
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(s => { document.getElementById("camera").srcObject = s; })
+    .catch(e => log.innerText = "Kamera nedostupná.");
 
   initThree();
 };
@@ -97,40 +88,33 @@ function initThree() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  // Vytvoříme cestu jako dlouhý "koberec" mířící k horám
-  const roadGeo = new THREE.PlaneGeometry(2, 100);
-  roadGeo.rotateX(-Math.PI / 2);
-  roadGeo.translate(0, -1.5, -50); // Posunout před kameru a na zem
-
-  const roadMat = new THREE.MeshBasicMaterial({ 
-    color: 0x00ffcc, 
-    transparent: true, 
-    opacity: 0.5,
-    side: THREE.DoubleSide 
-  });
-  
-  road = new THREE.Mesh(roadGeo, roadMat);
-  scene.add(road);
-
-  // Přidáme orientační čáry na cestu
-  const grid = new THREE.GridHelper(100, 50, 0x00ffcc, 0x004444);
-  grid.position.y = -1.49;
-  scene.add(grid);
+  // Vytvoření naváděcí cesty (šipky v řadě)
+  arrowGroup = new THREE.Group();
+  for(let i=0; i<10; i++) {
+    const geo = new THREE.ConeGeometry(0.4, 1.2, 4);
+    geo.rotateX(Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x2ecc71, transparent: true, opacity: 1 - (i*0.1) });
+    const cone = new THREE.Mesh(geo, mat);
+    cone.position.z = -5 - (i * 4); // Cesta vede od nás do dálky
+    cone.position.y = -1.5;
+    arrowGroup.add(cone);
+  }
+  scene.add(arrowGroup);
 
   window.addEventListener('deviceorientation', (e) => {
-    // webkitCompassHeading je klíčový pro iPhone
+    // Pro iOS je klíčové webkitCompassHeading
     let heading = e.webkitCompassHeading || (360 - e.alpha);
-    
+    if (!heading) return;
+
     const alpha = THREE.MathUtils.degToRad(heading);
     const beta = THREE.MathUtils.degToRad(e.beta);
     const gamma = THREE.MathUtils.degToRad(e.gamma);
 
-    // Otáčíme kamerou podle telefonu
+    // Orientace kamery
     camera.rotation.set(beta, gamma, -alpha, 'YXZ');
     
-    // Cesta se v prostoru otočí k cíli
-    road.rotation.y = THREE.MathUtils.degToRad(-bearingToTarget);
-    grid.rotation.y = THREE.MathUtils.degToRad(-bearingToTarget);
+    // Celá cesta se otočí směrem ke Krušným horám
+    arrowGroup.rotation.y = THREE.MathUtils.degToRad(-bearingToTarget);
   }, true);
 
   animate();
@@ -138,6 +122,11 @@ function initThree() {
 
 function animate() {
   requestAnimationFrame(animate);
+  // Jemná animace pohybu cesty, aby to vypadalo živě
+  arrowGroup.children.forEach((cone, i) => {
+    cone.position.z += 0.05;
+    if (cone.position.z > -2) cone.position.z = -42;
+  });
   renderer.render(scene, camera);
 }
 </script>
