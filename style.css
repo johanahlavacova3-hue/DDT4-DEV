@@ -7,50 +7,46 @@ body {
     justify-content: center;
     height: 100vh;
     color: #5eff5e;
-    font-family: sans-serif;
+    font-family: "bc-novatica", sans-serif;
     overflow: hidden;
     user-select: none;
+    touch-action: none;
 }
 
 #video-background {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
     object-fit: cover;
     z-index: -1;
     display: none;
 }
 
-/* Horní lišta přesně podle fotky */
 #top-bar {
     position: absolute;
-    top: 50px;
+    top: 40px;
     width: 100%;
     display: flex;
     justify-content: center;
-    overflow: hidden;
-    height: 30px;
+    height: 40px;
 }
 
 #top-indicator {
     display: flex;
     align-items: center;
-    gap: 15px;
-    white-space: nowrap;
+    gap: 20px;
     transition: transform 0.1s linear;
 }
 
-.tick { font-size: 12px; opacity: 0.8; font-weight: bold; }
-.triangle-small { font-size: 18px; }
+.tick { font-size: 14px; }
+.triangle-small { font-size: 20px; }
 .dot-small { font-size: 16px; }
 
-/* Hlavní vizuál kruhu */
 #compass-circle {
-    width: 260px;
-    height: 260px;
-    background-color: rgba(23, 34, 23, 0.8); /* Tmavě zelená z fotky */
+    width: 280px;
+    height: 280px;
+    background-color: rgba(10, 25, 10, 0.8);
+    border: 1px solid #5eff5e;
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -60,26 +56,22 @@ body {
 
 #arrow-pivot {
     position: absolute;
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: transform 0.1s linear;
 }
 
 .arrow-head {
-    width: 0;
-    height: 0;
+    width: 0; height: 0;
     border-left: 25px solid transparent;
     border-right: 25px solid transparent;
-    border-bottom: 45px solid #5eff5e;
-    transform: translateY(-35px); /* Špička nad středem */
+    border-bottom: 50px solid #5eff5e;
+    transform: translateY(-45px);
 }
 
 #center-dot {
-    width: 12px;
-    height: 12px;
+    width: 12px; height: 12px;
     background-color: #5eff5e;
     border-radius: 50%;
     z-index: 10;
@@ -87,30 +79,46 @@ body {
 
 #btn-start {
     position: absolute;
-    bottom: 80px;
-    padding: 12px 25px;
+    bottom: 100px;
+    padding: 15px 30px;
     background: #5eff5e;
     color: #000;
     border: none;
-    border-radius: 20px;
+    border-radius: 50px;
+    font-family: "bc-novatica", sans-serif;
     font-weight: bold;
     cursor: pointer;
-    z-index: 20;
+    z-index: 100;
 }
 
-#cam-toggle {
+/* Design přepínače podle zadání */
+#mode-toggle {
     position: absolute;
-    right: 25px;
-    bottom: 25px;
-    width: 55px;
-    height: 55px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 2px solid #5eff5e;
-    border-radius: 15px;
+    right: 35px;
+    bottom: 35px;
+    width: 120px;
+    height: 15px;
+    background: rgba(94, 255, 94, 0.2);
+    border: 1px solid #5eff5e;
+    border-radius: 25px;
+    cursor: pointer;
+    z-index: 100;
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    cursor: pointer;
-    z-index: 20;
+    padding: 0 2px; /* 2px od kraje */
+    box-sizing: border-box;
+}
+
+#toggle-ball {
+    width: 11px;
+    height: 11px;
+    background-color: #5eff5e;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+    transform: translateX(0); /* Výchozí pozice vlevo */
+}
+
+/* Stav při aktivované kameře */
+body.camera-on #toggle-ball {
+    transform: translateX(105px); /* Posun na pravý konec (120 - 11 - 4) */
 }
