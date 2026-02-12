@@ -3,8 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AR Kompas</title>
+    <title>AR Kompas - Krušné hory</title>
     <style>
+        :root {
+            --ui-green: #76ff4d; /* Ten přesný odstín ze screenshotu */
+            --bg-dark: #0a110a;
+        }
+
         body {
             margin: 0;
             background-color: #000;
@@ -13,13 +18,12 @@
             align-items: center;
             justify-content: center;
             height: 100vh;
-            color: #5eff5e;
-            font-family: monospace;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             overflow: hidden;
             user-select: none;
         }
 
-        /* Kamera na pozadí */
         #video-background {
             position: fixed;
             top: 0;
@@ -28,43 +32,47 @@
             height: 100%;
             object-fit: cover;
             z-index: -1;
-            display: none; /* Schovaná, dokud se neaktivuje */
+            display: none;
         }
 
-        /* Horní lišta */
+        /* Horní lišta s tečkami */
         #top-bar {
             position: absolute;
-            top: 40px;
+            top: 60px;
             width: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 20px;
-            letter-spacing: 8px;
-            white-space: nowrap;
+            overflow: hidden;
+            height: 30px;
             z-index: 10;
         }
 
         #top-indicator {
             position: absolute;
-            transition: transform 0.1s linear;
+            left: 50%;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 15px;
+            transform: translateX(-50%);
+            transition: transform 0.1s ease-out;
+            font-size: 14px;
+            color: white;
         }
 
-        /* Hlavní kruh - upraven na poloprůhledný */
+        .marker-triangle { color: var(--ui-green); font-size: 22px; }
+        .marker-dot { color: var(--ui-green); font-size: 24px; }
+        .marker-small { opacity: 0.8; }
+
+        /* Hlavní kruh */
         #compass-circle {
-            width: 280px;
-            height: 280px;
-            background-color: rgba(13, 20, 13, 0.6); /* Průhlednost pro AR efekt */
-            border: 1px solid rgba(94, 255, 94, 0.2);
+            width: 250px;
+            height: 250px;
+            background-color: rgba(20, 35, 20, 0.5); /* Tmavě zelený průhledný kruh */
             border-radius: 50%;
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 5;
+            backdrop-filter: blur(2px);
         }
 
         #arrow-pivot {
@@ -72,146 +80,199 @@
             width: 100%;
             height: 100%;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
-            transition: transform 0.1s linear;
+            justify-content: center;
+            transition: transform 0.1s ease-out;
         }
 
         .arrow-head {
             width: 0;
             height: 0;
-            border-left: 30px solid transparent;
-            border-right: 30px solid transparent;
-            border-bottom: 55px solid #5eff5e;
-            transform: translateY(-40px);
-            filter: drop-shadow(0 0 5px rgba(94, 255, 94, 0.5));
+            border-left: 28px solid transparent;
+            border-right: 28px solid transparent;
+            border-bottom: 50px solid var(--ui-green);
+            margin-bottom: 10px; /* Mezera mezi šipkou a tečkou */
         }
 
         #center-dot {
-            width: 14px;
-            height: 14px;
-            background-color: #5eff5e;
+            width: 12px;
+            height: 12px;
+            background-color: var(--ui-green);
             border-radius: 50%;
-            z-index: 10;
-            box-shadow: 0 0 10px rgba(94, 255, 94, 0.8);
         }
 
-        /* Tlačítka */
-        #btn-start {
+        /* Tlačítko uprostřed */
+        #btn-activate {
             position: absolute;
-            bottom: 60px;
-            padding: 15px 30px;
-            background: #5eff5e;
-            color: #000;
-            border: none;
-            border-radius: 30px;
-            font-weight: bold;
+            bottom: 35%;
+            background: rgba(40, 60, 40, 0.4);
+            border: 1px solid rgba(118, 255, 77, 0.3);
+            color: var(--ui-green);
+            padding: 8px 30px;
+            border-radius: 20px;
+            font-size: 13px;
+            text-transform: lowercase;
             cursor: pointer;
-            z-index: 20;
+            z-index: 15;
         }
 
+        /* Spodní info panel */
+        #bottom-info {
+            position: absolute;
+            bottom: 40px;
+            width: 90%;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            z-index: 10;
+        }
+
+        .text-group h2 {
+            margin: 0;
+            font-weight: 400;
+            font-size: 24px;
+            color: white;
+        }
+
+        .text-group h1 {
+            margin: 0;
+            font-weight: 500;
+            font-size: 28px;
+            color: var(--ui-green);
+        }
+
+        /* Posuvník vpravo dole */
+        .slider-container {
+            width: 120px;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            position: relative;
+            margin-bottom: 10px;
+        }
+
+        .slider-thumb {
+            width: 10px;
+            height: 10px;
+            background: var(--ui-green);
+            border-radius: 50%;
+            position: absolute;
+            left: 0;
+        }
+
+        /* Ovládací prvky skryté pro čistý vizuál */
         #cam-toggle {
             position: absolute;
+            top: 20px;
             right: 20px;
-            bottom: 20px;
-            width: 50px;
-            height: 50px;
-            background: rgba(94, 255, 94, 0.2);
-            border: 2px solid #5eff5e;
-            border-radius: 12px;
-            color: #5eff5e;
-            font-size: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 20;
+            opacity: 0.3;
+            color: white;
+            z-index: 100;
         }
     </style>
 </head>
 <body>
 
-    <video id="video-background" autoplay playsinline></video>
+<video id="video-background" autoplay playsinline></video>
 
-    <div id="top-bar">
-        <div id="top-indicator">
-            <span>·</span><span>▲</span><span>·</span><span>·</span><span>·</span><span>·</span><span>●</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span>
-        </div>
+<div id="top-bar">
+    <div id="top-indicator">
+        <span class="marker-small">|</span>
+        <span class="marker-triangle">▲</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
+        <span class="marker-dot">●</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
+        <span class="marker-small">|</span>
     </div>
+</div>
 
-    <div id="compass-circle">
-        <div id="arrow-pivot">
-            <div class="arrow-head"></div>
-        </div>
+<div id="compass-circle">
+    <div id="arrow-pivot">
+        <div class="arrow-head"></div>
         <div id="center-dot"></div>
     </div>
+</div>
 
-    <button id="btn-start">AKTIVOVAT SYSTÉM</button>
-    <div id="cam-toggle" title="Přepnout kameru">📷</div>
+<button id="btn-activate">Aktivovat směr</button>
 
-    <script>
-        const arrowPivot = document.getElementById('arrow-pivot');
-        const topIndicator = document.getElementById('top-indicator');
-        const btnStart = document.getElementById('btn-start');
-        const camToggle = document.getElementById('cam-toggle');
-        const video = document.getElementById('video-background');
+<div id="bottom-info">
+    <div class="text-group">
+        <h2>Navštivte</h2>
+        <h1>Krušné hory</h1>
+    </div>
+    <div class="slider-container">
+        <div class="slider-thumb"></div>
+    </div>
+</div>
 
-        let cameraActive = false;
-        let stream = null;
+<div id="cam-toggle">📷</div>
 
-        // --- Logika Kompasu ---
-        function updateOrientation(event) {
-            let heading = event.webkitCompassHeading || (360 - event.alpha);
-            if (heading !== undefined) {
-                arrowPivot.style.transform = `rotate(${-heading}deg)`;
-                let moveX = ((heading % 360) - 180) * 0.8;
-                topIndicator.style.transform = `translateX(${moveX}px)`;
+<script>
+    const arrowPivot = document.getElementById('arrow-pivot');
+    const topIndicator = document.getElementById('top-indicator');
+    const btnActivate = document.getElementById('btn-activate');
+    const camToggle = document.getElementById('cam-toggle');
+    const video = document.getElementById('video-background');
+
+    let cameraActive = false;
+
+    // --- Kompas ---
+    function updateOrientation(event) {
+        let heading = event.webkitCompassHeading || (360 - event.alpha);
+        if (heading !== undefined) {
+            // Hlavní velká šipka
+            arrowPivot.style.transform = `rotate(${-heading}deg)`;
+            
+            // Horní lišta (posun podle rotace)
+            let moveX = ((heading % 360) - 180) * 2; 
+            topIndicator.style.transform = `translateX(calc(-50% - ${moveX}px))`;
+        }
+    }
+
+    // --- Kamera ---
+    async function toggleCamera() {
+        if (!cameraActive) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" }, 
+                    audio: false 
+                });
+                video.srcObject = stream;
+                video.style.display = 'block';
+                cameraActive = true;
+            } catch (err) {
+                console.error("Kamera nefunguje:", err);
             }
         }
+    }
 
-        // --- Logika Kamery ---
-        async function toggleCamera() {
-            if (!cameraActive) {
-                try {
-                    stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: { facingMode: "environment" }, 
-                        audio: false 
-                    });
-                    video.srcObject = stream;
-                    video.style.display = 'block';
-                    cameraActive = true;
-                    camToggle.style.background = "#5eff5e";
-                    camToggle.style.color = "#000";
-                } catch (err) {
-                    alert("Nepodařilo se přistoupit ke kameře: " + err);
-                }
-            } else {
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                }
-                video.style.display = 'none';
-                cameraActive = false;
-                camToggle.style.background = "rgba(94, 255, 94, 0.2)";
-                camToggle.style.color = "#5eff5e";
-            }
-        }
-
-        // --- Start ---
-        async function init() {
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                const permission = await DeviceOrientationEvent.requestPermission();
-                if (permission === 'granted') {
-                    window.addEventListener('deviceorientation', updateOrientation);
-                    btnStart.style.display = 'none';
-                }
-            } else {
+    // --- Start po kliknutí na tlačítko ---
+    btnActivate.addEventListener('click', async () => {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            const permission = await DeviceOrientationEvent.requestPermission();
+            if (permission === 'granted') {
                 window.addEventListener('deviceorientation', updateOrientation);
-                btnStart.style.display = 'none';
+                toggleCamera();
+                btnActivate.style.opacity = "0.5";
+                btnActivate.innerText = "aktivováno";
             }
+        } else {
+            window.addEventListener('deviceorientation', updateOrientation);
+            toggleCamera();
+            btnActivate.style.opacity = "0.5";
         }
+    });
 
-        btnStart.addEventListener('click', init);
-        camToggle.addEventListener('click', toggleCamera);
-    </script>
+    camToggle.addEventListener('click', toggleCamera);
+</script>
 </body>
 </html>
