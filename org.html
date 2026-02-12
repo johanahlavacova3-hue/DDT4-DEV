@@ -2,8 +2,8 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Precizní Kompas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AR Kompas</title>
     <style>
         body {
             margin: 0;
@@ -19,7 +19,19 @@
             user-select: none;
         }
 
-        /* Horní lišta v jednom řádku */
+        /* Kamera na pozadí */
+        #video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1;
+            display: none; /* Schovaná, dokud se neaktivuje */
+        }
+
+        /* Horní lišta */
         #top-bar {
             position: absolute;
             top: 40px;
@@ -30,6 +42,7 @@
             font-size: 20px;
             letter-spacing: 8px;
             white-space: nowrap;
+            z-index: 10;
         }
 
         #top-indicator {
@@ -40,19 +53,20 @@
             gap: 10px;
         }
 
-        /* Hlavní kruh */
+        /* Hlavní kruh - upraven na poloprůhledný */
         #compass-circle {
             width: 280px;
             height: 280px;
-            background-color: #0d140d;
+            background-color: rgba(13, 20, 13, 0.6); /* Průhlednost pro AR efekt */
+            border: 1px solid rgba(94, 255, 94, 0.2);
             border-radius: 50%;
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 5;
         }
 
-        /* Kontejner šipky - rotuje kolem středu */
         #arrow-pivot {
             position: absolute;
             width: 100%;
@@ -63,25 +77,26 @@
             transition: transform 0.1s linear;
         }
 
-        /* Šipka posunutá nahoru od středu */
         .arrow-head {
             width: 0;
             height: 0;
             border-left: 30px solid transparent;
             border-right: 30px solid transparent;
             border-bottom: 55px solid #5eff5e;
-            transform: translateY(-40px); /* Vzdálenost špičky od středu */
+            transform: translateY(-40px);
+            filter: drop-shadow(0 0 5px rgba(94, 255, 94, 0.5));
         }
 
-        /* Fixní středové kolečko */
         #center-dot {
             width: 14px;
             height: 14px;
             background-color: #5eff5e;
             border-radius: 50%;
             z-index: 10;
+            box-shadow: 0 0 10px rgba(94, 255, 94, 0.8);
         }
 
+        /* Tlačítka */
         #btn-start {
             position: absolute;
             bottom: 60px;
@@ -92,10 +107,31 @@
             border-radius: 30px;
             font-weight: bold;
             cursor: pointer;
+            z-index: 20;
+        }
+
+        #cam-toggle {
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            width: 50px;
+            height: 50px;
+            background: rgba(94, 255, 94, 0.2);
+            border: 2px solid #5eff5e;
+            border-radius: 12px;
+            color: #5eff5e;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 20;
         }
     </style>
 </head>
 <body>
+
+    <video id="video-background" autoplay playsinline></video>
 
     <div id="top-bar">
         <div id="top-indicator">
@@ -110,45 +146,72 @@
         <div id="center-dot"></div>
     </div>
 
-    <button id="btn-start">AKTIVOVAT SENZORY</button>
+    <button id="btn-start">AKTIVOVAT SYSTÉM</button>
+    <div id="cam-toggle" title="Přepnout kameru">📷</div>
 
     <script>
         const arrowPivot = document.getElementById('arrow-pivot');
         const topIndicator = document.getElementById('top-indicator');
-        const btn = document.getElementById('btn-start');
+        const btnStart = document.getElementById('btn-start');
+        const camToggle = document.getElementById('cam-toggle');
+        const video = document.getElementById('video-background');
 
+        let cameraActive = false;
+        let stream = null;
+
+        // --- Logika Kompasu ---
         function updateOrientation(event) {
-            // alpha = rotace kolem svislé osy (kompas)
-            // Používáme webkitCompassHeading pro iOS (přesnější sever) nebo alpha
             let heading = event.webkitCompassHeading || (360 - event.alpha);
-            
             if (heading !== undefined) {
-                // 1. Šipka míří stále na stejný bod (sever)
-                // Pokud chceš, aby ukazovala na sever, necháme heading. 
-                // Pokud chceš, aby "stála" v prostoru, používáme zápornou hodnotu rotace telefonu.
                 arrowPivot.style.transform = `rotate(${-heading}deg)`;
-
-                // 2. Horní lišta se posouvá vodorovně
-                // Rozsah posunu cca -150px až 150px
                 let moveX = ((heading % 360) - 180) * 0.8;
                 topIndicator.style.transform = `translateX(${moveX}px)`;
             }
         }
 
+        // --- Logika Kamery ---
+        async function toggleCamera() {
+            if (!cameraActive) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: "environment" }, 
+                        audio: false 
+                    });
+                    video.srcObject = stream;
+                    video.style.display = 'block';
+                    cameraActive = true;
+                    camToggle.style.background = "#5eff5e";
+                    camToggle.style.color = "#000";
+                } catch (err) {
+                    alert("Nepodařilo se přistoupit ke kameře: " + err);
+                }
+            } else {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                video.style.display = 'none';
+                cameraActive = false;
+                camToggle.style.background = "rgba(94, 255, 94, 0.2)";
+                camToggle.style.color = "#5eff5e";
+            }
+        }
+
+        // --- Start ---
         async function init() {
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                 const permission = await DeviceOrientationEvent.requestPermission();
                 if (permission === 'granted') {
                     window.addEventListener('deviceorientation', updateOrientation);
-                    btn.style.display = 'none';
+                    btnStart.style.display = 'none';
                 }
             } else {
                 window.addEventListener('deviceorientation', updateOrientation);
-                btn.style.display = 'none';
+                btnStart.style.display = 'none';
             }
         }
 
-        btn.addEventListener('click', init);
+        btnStart.addEventListener('click', init);
+        camToggle.addEventListener('click', toggleCamera);
     </script>
 </body>
 </html>
