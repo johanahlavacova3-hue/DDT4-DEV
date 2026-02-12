@@ -33,7 +33,6 @@ const placeBtn = document.getElementById("place");
 let scene, camera, renderer, arrow;
 let placed = false;
 const groundHeight = -1.6; // Výška země pod kamerou (předpokládaná výška očí)
-const visibilityThreshold = 30; // Tolerance v stupních pro viditelnost
 
 startBtn.onclick = async () => {
   if (typeof DeviceOrientationEvent?.requestPermission === 'function') {
@@ -73,19 +72,6 @@ function init() {
     camera.rotation.y = g;
     camera.rotation.x = b;
     camera.rotation.z = -a;
-    
-    if (arrow) {
-      // Výpočet viditelnosti na základě úhlu pohledu
-      const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-      const dirToArrow = arrow.position.clone().normalize(); // Kamera je v 0,0,0
-      const dot = camForward.dot(dirToArrow);
-      if (dot > 0) {
-        const angle = Math.acos(dot) * (180 / Math.PI);
-        arrow.visible = (angle <= visibilityThreshold);
-      } else {
-        arrow.visible = false;
-      }
-    }
   }, true);
 
   placeBtn.onclick = placeArrow;
@@ -109,7 +95,7 @@ function createArrow() {
     side: THREE.DoubleSide
   });
   const mesh = new THREE.Mesh(arrowGeometry, material);
-  mesh.scale.set(1.5, 1.5, 1.5); // Větší pro lepší viditelnost
+  mesh.scale.set(2, 2, 2); // Větší pro lepší viditelnost
   return mesh;
 }
 
@@ -121,13 +107,12 @@ function placeArrow() {
   const normal = new THREE.Vector3(0, 1, 0);
   const denom = dir.dot(normal);
 
-  if (denom <= 0) {
-    // Není směrem dolů, nelze umístit (aby se zabránilo umístění nahoru nebo dozadu)
+  if (denom >= 0) {
     console.log("Podívejte se dolů na zem pro umístění šipky.");
     return;
   }
 
-  const t = groundHeight / denom; // Protože groundHeight je negativní a denom pozitivní (dir.y negativní)
+  const t = groundHeight / denom; // Protože groundHeight je negativní a denom negativní
   if (t < 0.1 || t > 20) {
     console.log("Vzdálenost mimo rozsah.");
     return;
