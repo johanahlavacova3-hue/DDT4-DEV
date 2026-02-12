@@ -25,7 +25,7 @@
 
 <video id="camera" autoplay playsinline muted></video>
 <div id="overlay">
-    <button id="startBtn">SPUSTIT AaaaR</button>
+    <button id="startBtn">SPUSTIT AR</button>
 </div>
 
 <script type="module">
@@ -37,7 +37,7 @@ const startBtn = document.getElementById('startBtn');
 const overlay = document.getElementById('overlay');
 
 startBtn.addEventListener('click', async () => {
-    // 1. Žádost o povolení (iOS 13+)
+    // iOS 13+ povolení
     if (typeof DeviceOrientationEvent.requestPermission === 'function') {
         const response = await DeviceOrientationEvent.requestPermission();
         if (response !== 'granted') {
@@ -46,7 +46,7 @@ startBtn.addEventListener('click', async () => {
         }
     }
 
-    // 2. Kamera
+    // Spuštění kamery
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     document.getElementById('camera').srcObject = stream;
 
@@ -57,7 +57,8 @@ startBtn.addEventListener('click', async () => {
 function initAR() {
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    
+    camera.position.set(0, 1.6, 0); // úroveň očí
+
     renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -69,12 +70,10 @@ function initAR() {
     sun.position.set(5, 10, 7);
     scene.add(sun);
 
-    // Senzory pohybu (Rotace kamery)
+    // DeviceOrientationControls
     controls = new DeviceOrientationControls(camera);
 
-    // Vytvoření šipky (3D jako na obrázku)
     createArrow();
-
     animate();
 }
 
@@ -83,33 +82,28 @@ function createArrow() {
     const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
 
     // Tělo šipky
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.2), mat);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2), mat);
     shaft.rotation.x = Math.PI / 2;
     group.add(shaft);
 
-    // Hrot
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8), mat);
-    head.rotation.x = -Math.PI / 2;
-    head.position.z = -1;
+    // Hrot šipky
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3), mat);
+    head.rotation.x = Math.PI / 2;
+    head.position.z = -0.75; // konec šipky
     group.add(head);
 
-    // UMÍSTĚNÍ: 3 metry před kameru, 1.6m pod úroveň očí (na podlahu)
-    // Protože se kamera hned po startu zorientuje, musíme šipku umístit 
-    // v jejím aktuálním "výhledu".
+    // Umístění 3 metry dopředu
     setTimeout(() => {
-        const forward = new THREE.Vector3(0, 0, -1);
-        forward.applyQuaternion(camera.quaternion);
-        forward.y = 0; // Chceme směr po podlaze
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        forward.y = 0;
         forward.normalize();
 
-        group.position.set(forward.x * 3, -1.6, forward.z * 3);
-        
-        // Otočit šipku směrem od nás
-        group.lookAt(forward.x * 10, -1.6, forward.z * 10);
-        
+        group.position.set(forward.x * 3, 0, forward.z * 3); // podlaha
+        group.lookAt(forward.x * 10, 0, forward.z * 10);
+
         scene.add(group);
         arrow = group;
-    }, 500); // Malá pauza na stabilizaci sensorů
+    }, 500);
 }
 
 function animate() {
