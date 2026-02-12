@@ -11,7 +11,6 @@ function handleMotion(event) {
     let heading = event.webkitCompassHeading || (360 - event.alpha);
     if (heading) {
         arrowPivot.style.transform = `rotate(${-heading}deg)`;
-        // Výpočet posunu horní lišty
         let offset = ((heading % 360) - 180) * 1.5;
         topIndicator.style.transform = `translateX(${-offset}px)`;
     }
