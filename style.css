@@ -38,15 +38,18 @@ body {
     transition: transform 0.1s linear;
 }
 
-.tick { font-size: 14px; }
-.triangle-small { font-size: 20px; }
-.dot-small { font-size: 16px; }
+/* Kontejner pro kruh a tlačítko pod ním */
+#main-ui-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform: translateY(-10px); /* Posun celého bloku o 10px nahoru */
+}
 
 #compass-circle {
-    width: 280px;
-    height: 280px;
-    background-color: rgba(10, 25, 10, 0.8);
-    border: 1px solid #5eff5e;
+    width: 200px;
+    height: 200px;
+    background-color: rgba(23, 34, 23, 0.8);
     border-radius: 50%;
     position: relative;
     display: flex;
@@ -64,34 +67,40 @@ body {
 
 .arrow-head {
     width: 0; height: 0;
-    border-left: 25px solid transparent;
-    border-right: 25px solid transparent;
-    border-bottom: 50px solid #5eff5e;
-    transform: translateY(-45px);
+    border-left: 27.5px solid transparent; /* Celková šířka cca 55px */
+    border-right: 27.5px solid transparent;
+    border-bottom: 55px solid #5eff5e;
+    transform: translateY(-40px);
 }
 
 #center-dot {
-    width: 12px; height: 12px;
+    width: 16px;
+    height: 16px;
     background-color: #5eff5e;
     border-radius: 50%;
     z-index: 10;
 }
 
+/* Tlačítko pod kruhem */
 #btn-start {
-    position: absolute;
-    bottom: 100px;
-    padding: 15px 30px;
+    margin-top: 10px;
+    width: 120px;
+    height: 15px;
     background: #5eff5e;
     color: #000;
     border: none;
-    border-radius: 50px;
+    border-radius: 25px;
     font-family: "bc-novatica", sans-serif;
-    font-weight: bold;
+    font-size: 10pt;
+    font-weight: 400; /* Regular */
     cursor: pointer;
-    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
 }
 
-/* Design přepínače podle zadání */
+/* Toggle vpravo dole */
 #mode-toggle {
     position: absolute;
     right: 35px;
@@ -99,14 +108,12 @@ body {
     width: 120px;
     height: 15px;
     background: rgba(94, 255, 94, 0.2);
-    border: 1px solid #5eff5e;
     border-radius: 25px;
     cursor: pointer;
-    z-index: 100;
+    padding: 0 2px;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
-    padding: 0 2px; /* 2px od kraje */
-    box-sizing: border-box;
 }
 
 #toggle-ball {
@@ -115,10 +122,8 @@ body {
     background-color: #5eff5e;
     border-radius: 50%;
     transition: transform 0.3s ease;
-    transform: translateX(0); /* Výchozí pozice vlevo */
 }
 
-/* Stav při aktivované kameře */
 body.camera-on #toggle-ball {
-    transform: translateX(105px); /* Posun na pravý konec (120 - 11 - 4) */
+    transform: translateX(105px);
 }
