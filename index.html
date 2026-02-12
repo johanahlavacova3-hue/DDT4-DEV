@@ -1,170 +1,128 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Automatická AR Šipka</title>
-<style>
-  body { margin: 0; overflow: hidden; background: black; font-family: sans-serif; }
-  
-  /* Video na pozadí */
-  video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; }
-  
-  /* Canvas pro 3D */
-  canvas { position: fixed; top: 0; left: 0; z-index: 1; pointer-events: none; }
-  
-  /* UI */
-  #overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2;
-    display: flex; flex-direction: column; justify-content: center; align-items: center;
-    background: rgba(0,0,0,0.5); /* Zatmavení před startem */
-  }
-
-  /* Tlačítko musí zůstat kvůli Apple bezpečnosti */
-  button {
-    background: #FF3B30; /* Výrazná červená */
-    color: white; border: none; border-radius: 50px;
-    padding: 20px 40px; font-size: 20px; font-weight: bold;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    cursor: pointer;
-  }
-  
-  #status {
-    position: fixed; top: 20px; left: 0; width: 100%;
-    text-align: center; color: white; font-weight: bold;
-    text-shadow: 0 2px 4px black; z-index: 3; display: none;
-    font-size: 18px;
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AR Fixní Šipka</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: -apple-system, sans-serif; }
+        video { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+        canvas { position: fixed; top: 0; left: 0; z-index: 1; }
+        
+        #overlay {
+            position: fixed; inset: 0; z-index: 10;
+            display: flex; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.7);
+        }
+        button {
+            padding: 20px 40px; font-size: 22px; font-weight: bold;
+            background: #ff3b30; color: white; border: none; border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+    </style>
 </head>
 <body>
 
 <video id="camera" autoplay playsinline muted></video>
-
-<div id="status">Kalibruji senzory... držte telefon rovně</div>
-
 <div id="overlay">
-  <button id="start">SPUSTIT AR</button>
+    <button id="startBtn">SPUSTIT AR</button>
 </div>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { DeviceOrientationControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/DeviceOrientationControls.js';
 
-const startBtn = document.getElementById("start");
-const overlay = document.getElementById("overlay");
-const statusText = document.getElementById("status");
+let scene, camera, renderer, controls, arrow;
+const startBtn = document.getElementById('startBtn');
+const overlay = document.getElementById('overlay');
 
-let scene, camera, renderer, controls;
-let arrowMesh;
-const CAMERA_HEIGHT = 1.6; // Výška očí (cca 160cm od země)
-
-startBtn.onclick = async () => {
-  // 1. Vyžádání povolení (iOS requirement)
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    try {
-      const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission !== 'granted') {
-        alert("Musíte povolit přístup k senzorům, jinak AR nebude fungovat.");
-        return;
-      }
-    } catch (e) {
-      console.error(e);
+startBtn.addEventListener('click', async () => {
+    // 1. Žádost o povolení (iOS 13+)
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const response = await DeviceOrientationEvent.requestPermission();
+        if (response !== 'granted') {
+            alert('Povolte senzory pohybu v nastavení Safari.');
+            return;
+        }
     }
-  }
 
-  // Skryjeme tlačítko
-  overlay.style.display = "none";
-  statusText.style.display = "block";
-  
-  // Spustíme logiku
-  init();
-};
+    // 2. Kamera
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    document.getElementById('camera').srcObject = stream;
 
-function init() {
-  // 2. Kamera
-  const video = document.getElementById("camera");
-  navigator.mediaDevices.getUserMedia({ 
-    video: { facingMode: "environment" } 
-  }).then(stream => {
-    video.srcObject = stream;
-  });
+    overlay.style.display = 'none';
+    initAR();
+});
 
-  // 3. Three.js Scéna
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-  
-  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
+function initAR() {
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    
+    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
 
-  // Světlo
-  const light = new THREE.DirectionalLight(0xffffff, 1.5);
-  light.position.set(0, 10, 5);
-  scene.add(light);
-  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    // Osvětlení
+    scene.add(new THREE.AmbientLight(0xffffff, 1));
+    const sun = new THREE.DirectionalLight(0xffffff, 2);
+    sun.position.set(5, 10, 7);
+    scene.add(sun);
 
-  // 4. Ovládání orientace
-  controls = new DeviceOrientationControls(camera);
-  
-  // 5. AUTOMATICKÉ UMÍSTĚNÍ
-  // Počkáme 1.5 sekundy, než se senzory "usadí", a pak vystřelíme šipku
-  setTimeout(() => {
-    placeArrowAutomatically();
-    statusText.innerText = "Šipka umístěna";
-    setTimeout(() => { statusText.style.display = 'none'; }, 2000); // Schovat text po chvíli
-  }, 1500);
+    // Senzory pohybu (Rotace kamery)
+    controls = new DeviceOrientationControls(camera);
 
-  animate();
+    // Vytvoření šipky (3D jako na obrázku)
+    createArrow();
+
+    animate();
 }
 
-function create3DArrow() {
-  const group = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Červená
+function createArrow() {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
 
-  // Tělo šipky
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.5, 32), material);
-  shaft.position.y = -0.75; 
-  shaft.rotation.x = -Math.PI / 2; // Ležet na zemi
+    // Tělo šipky
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.2), mat);
+    shaft.rotation.x = Math.PI / 2;
+    group.add(shaft);
 
-  // Hrot šipky
-  const head = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.6, 32), material);
-  head.position.z = -1.5; // Na konci těla
-  head.rotation.x = -Math.PI / 2;
+    // Hrot
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8), mat);
+    head.rotation.x = -Math.PI / 2;
+    head.position.z = -1;
+    group.add(head);
 
-  group.add(shaft);
-  group.add(head);
-  
-  return group;
-}
+    // UMÍSTĚNÍ: 3 metry před kameru, 1.6m pod úroveň očí (na podlahu)
+    // Protože se kamera hned po startu zorientuje, musíme šipku umístit 
+    // v jejím aktuálním "výhledu".
+    setTimeout(() => {
+        const forward = new THREE.Vector3(0, 0, -1);
+        forward.applyQuaternion(camera.quaternion);
+        forward.y = 0; // Chceme směr po podlaze
+        forward.normalize();
 
-function placeArrowAutomatically() {
-  arrowMesh = create3DArrow();
-
-  // Získáme směr, kam se kamera aktuálně dívá
-  const vector = new THREE.Vector3();
-  camera.getWorldDirection(vector);
-  
-  // Ignorujeme výšku pohledu, chceme jen směr po zemi
-  vector.y = 0; 
-  vector.normalize(); 
-  vector.multiplyScalar(3); // Vzdálenost 3 metry
-
-  // Nastavíme pozici
-  arrowMesh.position.set(vector.x, -CAMERA_HEIGHT, vector.z);
-
-  // Otočíme šipku tak, aby mířila směrem od nás
-  const angle = Math.atan2(vector.x, vector.z);
-  arrowMesh.rotation.y = angle;
-
-  scene.add(arrowMesh);
+        group.position.set(forward.x * 3, -1.6, forward.z * 3);
+        
+        // Otočit šipku směrem od nás
+        group.lookAt(forward.x * 10, -1.6, forward.z * 10);
+        
+        scene.add(group);
+        arrow = group;
+    }, 500); // Malá pauza na stabilizaci sensorů
 }
 
 function animate() {
-  requestAnimationFrame(animate);
-  if(controls) controls.update();
-  renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+    if (controls) controls.update();
+    renderer.render(scene, camera);
 }
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
 </body>
 </html>
