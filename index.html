@@ -1,35 +1,135 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Krušné hory AR</title>
-
-  <script type="module"
-    src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js">
-  </script>
-
-  <style>
-    body { margin:0; background:#000; }
-    model-viewer {
-      width:100vw;
-      height:100vh;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krušné hory – kamera AR</title>
+<style>
+  body { margin:0; overflow:hidden; background:black; }
+  video { 
+    position:fixed; 
+    top:0; 
+    left:0; 
+    width:100vw; 
+    height:100vh; 
+    object-fit:cover;
+    z-index:0;
+  }
+  canvas { 
+    position:fixed; 
+    top:0; 
+    left:0; 
+    z-index:1;
+  }
+  #start {
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%, -50%);
+    z-index:2;
+    padding:15px 25px;
+    background:white;
+    border:none;
+    font-size:18px;
+  }
+</style>
 </head>
 <body>
 
-<model-viewer
-  src="kr1.glb"
-  ios-src="kr1.usdz"
-  alt="Krušné hory"
-  ar
-  ar-modes="quick-look"
-  ar-scale="fixed"
-  camera-controls
-  exposure="1.2"
-  shadow-intensity="1">
-</model-viewer>
+<button id="start">Spustit krajinu</button>
+<video id="camera" autoplay playsinline></video>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
+
+const video = document.getElementById("camera");
+const startBtn = document.getElementById("start");
+
+let scene, camera, renderer, mountains;
+
+startBtn.onclick = async () => {
+
+  startBtn.style.display = "none";
+
+  // Kamera
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "environment" },
+    audio: false
+  });
+  video.srcObject = stream;
+
+  initThree();
+  animate();
+};
+
+function initThree() {
+
+  scene = new THREE.Scene();
+
+  camera = new THREE.PerspectiveCamera(
+    70,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    100
+  );
+  camera.position.z = 3;
+
+  renderer = new THREE.WebGLRenderer({ alpha:true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(2,5,5);
+  scene.add(light);
+
+  mountains = createMountains();
+  scene.add(mountains);
+
+  // gyroskop
+  window.addEventListener("deviceorientation", (event) => {
+    if(event.beta !== null){
+      mountains.rotation.x = event.beta * 0.005;
+      mountains.rotation.y = event.gamma * 0.005;
+    }
+  });
+}
+
+function createMountains(){
+
+  const geometry = new THREE.PlaneGeometry(5,5,100,100);
+  geometry.rotateX(-Math.PI/2);
+
+  const pos = geometry.attributes.position;
+
+  for(let i=0;i<pos.count;i++){
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+
+    const height =
+      Math.sin(x*2)*0.4 +
+      Math.cos(z*1.5)*0.3 +
+      Math.random()*0.1;
+
+    pos.setY(i,height);
+  }
+
+  geometry.computeVertexNormals();
+
+  const material = new THREE.MeshStandardMaterial({
+    color:0x4f6b5a,
+    roughness:1,
+    metalness:0
+  });
+
+  return new THREE.Mesh(geometry, material);
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+
+</script>
 
 </body>
 </html>
