@@ -3,151 +3,130 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AR Lesní cesta – Krušné hory</title>
+<title>AR Navigace – Krušné hory</title>
 <style>
   body { margin:0; overflow:hidden; background:black; font-family: sans-serif; }
   video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
   canvas { position:fixed; top:0; left:0; z-index:1; pointer-events: none; }
-  #overlay {
-    position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
-    z-index:2; text-align: center; width: 80%;
+  #ui {
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    z-index:2; text-align: center; color: white; background: rgba(0,0,0,0.6);
+    padding: 15px; border-radius: 20px; width: 80%;
   }
   button {
-    padding:15px 30px; background:#27ae60; color:white; border:none;
-    border-radius: 50px; font-size:18px; font-weight: bold; cursor: pointer;
+    padding:15px 30px; background:#e67e22; color:white; border:none;
+    border-radius: 50px; font-size:18px; font-weight: bold; margin-bottom: 10px;
   }
 </style>
 </head>
 <body>
 
-<div id="overlay">
-  <button id="start">Vstoupit do lesa</button>
+<div id="ui">
+  <button id="start">Spustit navigaci</button>
+  <div id="status">Čekám na start...</div>
 </div>
 <video id="camera" autoplay playsinline></video>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
 
-const video = document.getElementById("camera");
+const uiStatus = document.getElementById("status");
 const startBtn = document.getElementById("start");
-const overlay = document.getElementById("overlay");
 
-let scene, camera, renderer, worldGroup;
-let trees = [];
-const treeCount = 40;
-const moveSpeed = 0.05; // Rychlost chůze
+// Souřadnice Klínovce (Krušné hory)
+const TARGET_COORDS = { lat: 50.395, lon: 12.967 };
+let userCoords = null;
+let bearingToTarget = 0;
 
-async function requestPermissions() {
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    return await DeviceOrientationEvent.requestPermission() === 'granted';
-  }
-  return true;
+let scene, camera, renderer, arrow;
+
+// 1. Výpočet azimutu (směru) k cíli
+function calculateBearing(lat1, lon1, lat2, lon2) {
+  const l1 = lat1 * Math.PI / 180;
+  const l2 = lat2 * Math.PI / 180;
+  const dl = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dl) * Math.cos(l2);
+  const x = Math.cos(l1) * Math.sin(l2) - Math.sin(l1) * Math.cos(l2) * Math.cos(dl);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
+// 2. Povolení senzorů a GPS
 startBtn.onclick = async () => {
-  if (await requestPermissions()) {
-    overlay.style.display = "none";
-    startCamera();
-    initThree();
-    animate();
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    const res = await DeviceOrientationEvent.requestPermission();
+    if (res !== 'granted') return alert("Potřebujeme senzory!");
   }
+
+  startBtn.style.display = "none";
+  uiStatus.innerText = "Hledám GPS...";
+
+  navigator.geolocation.watchPosition(pos => {
+    userCoords = pos.coords;
+    bearingToTarget = calculateBearing(userCoords.latitude, userCoords.longitude, TARGET_COORDS.lat, TARGET_COORDS.lon);
+    uiStatus.innerText = `Klínovec je cca ${bearingToTarget.toFixed(0)}° od severu`;
+  }, err => {
+    uiStatus.innerText = "GPS nedostupná.";
+  }, { enableHighAccuracy: true });
+
+  initAR();
 };
 
-function startCamera() {
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-    .then(stream => { video.srcObject = stream; })
-    .catch(err => console.error(err));
-}
+function initAR() {
+  // Kamera (video feed)
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(s => {
+    document.getElementById("camera").srcObject = s;
+  });
 
-function initThree() {
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   
-  renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true });
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
-  scene.add(light);
+  // Vytvoření cesty/šipky
+  const arrowGeo = new THREE.ConeGeometry(0.5, 5, 3); // Trojúhelníková cesta
+  arrowGeo.rotateX(Math.PI / 2); // Položit na zem
+  const arrowMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+  arrow = new THREE.Mesh(arrowGeo, arrowMat);
+  arrow.position.y = -2; // Pod nohama
+  scene.add(arrow);
 
-  // Skupina pro celý svět, aby se nám lépe hýbalo
-  worldGroup = new THREE.Group();
-  scene.add(worldGroup);
+  // Pomocné světlo
+  scene.add(new THREE.AmbientLight(0xffffff, 1));
 
-  // Vytvoření cesty
-  const roadGeo = new THREE.PlaneGeometry(4, 200);
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide });
-  const road = new THREE.Mesh(roadGeo, roadMat);
-  road.rotation.x = -Math.PI / 2;
-  road.position.y = -1.6; // Výška pod nohama
-  worldGroup.add(road);
+  // Sledování kompasu na iOS
+  window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+  window.addEventListener('deviceorientation', handleOrientation, true);
 
-  // Vytvoření stromů
-  for(let i=0; i<treeCount; i++) {
-    const tree = createTree();
-    resetTree(tree, true); // Rozmístit náhodně po délce
-    trees.push(tree);
-    worldGroup.add(tree);
-  }
-
-  // Senzory pro iOS
-  window.addEventListener("deviceorientation", (e) => {
-    const alpha = e.alpha ? THREE.MathUtils.degToRad(e.alpha) : 0;
-    const beta = e.beta ? THREE.MathUtils.degToRad(e.beta) : 0;
-    const gamma = e.gamma ? THREE.MathUtils.degToRad(e.gamma) : 0;
-    camera.rotation.set(beta, gamma, alpha, 'YXZ');
-  });
+  animate();
 }
 
-function createTree() {
-  const group = new THREE.Group();
+function handleOrientation(event) {
+  let compass = event.webkitCompassHeading || event.alpha;
+  if (compass === undefined) return;
+
+  // Three.js rotace kamery podle kompasu
+  // Alpha je rotace kolem osy Z (vzhůru)
+  const alpha = THREE.MathUtils.degToRad(compass);
+  const beta = THREE.MathUtils.degToRad(event.beta);
+  const gamma = THREE.MathUtils.degToRad(event.gamma);
+
+  // Nastavíme rotaci scény tak, aby nula byla vždy na Severu
+  // a šipka mířila k vypočítanému azimutu
+  camera.rotation.set(beta, gamma, -alpha, 'YXZ');
   
-  // Kmen
-  const trunkGeo = new THREE.CylinderGeometry(0.15, 0.2, 2, 8);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
-  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-  trunk.position.y = 1; 
-  group.add(trunk);
-
-  // Koruna
-  const leavesGeo = new THREE.ConeGeometry(0.8, 2.5, 8);
-  const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27 });
-  const leaves = new THREE.Mesh(leavesGeo, leavesMat);
-  leaves.position.y = 2.5;
-  group.add(leaves);
-
-  return group;
-}
-
-function resetTree(tree, randomZ = false) {
-  // Stromy dáváme vlevo nebo vpravo od cesty (cesta má šířku 4)
-  const side = Math.random() > 0.5 ? 1 : -1;
-  tree.position.x = (2.5 + Math.random() * 5) * side;
-  tree.position.y = -1.6;
-  // Pokud je to na začátku, rozhodíme je po celé délce, jinak je dáváme na konec horizontu
-  tree.position.z = randomZ ? (Math.random() * -150) : -150;
+  if (arrow) {
+    // Šipka se otočí směrem k cíli (vzhledem k severu)
+    const targetRad = THREE.MathUtils.degToRad(-bearingToTarget);
+    arrow.rotation.y = targetRad;
+  }
 }
 
 function animate() {
   requestAnimationFrame(animate);
-
-  // Simulace chůze: Posouváme stromy a cestu směrem k nám
-  trees.forEach(tree => {
-    tree.position.z += moveSpeed;
-    // Pokud strom zmizí za námi, pošleme ho zase dopředu
-    if (tree.position.z > 10) {
-      resetTree(tree);
-    }
-  });
-
   renderer.render(scene, camera);
 }
-
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
 </script>
 </body>
 </html>
