@@ -11,6 +11,7 @@ function handleMotion(event) {
     let heading = event.webkitCompassHeading || (360 - event.alpha);
     if (heading) {
         arrowPivot.style.transform = `rotate(${-heading}deg)`;
+        // Výpočet posunu horní lišty
         let offset = ((heading % 360) - 180) * 1.5;
         topIndicator.style.transform = `translateX(${-offset}px)`;
     }
@@ -27,7 +28,7 @@ async function toggleCamera() {
             cameraActive = true;
             document.body.classList.add('camera-on');
         } catch (err) {
-            console.error("Kamera nedostupná:", err);
+            console.error("Kamera nedostupná");
         }
     } else {
         if (stream) stream.getTracks().forEach(t => t.stop());
@@ -42,7 +43,7 @@ async function startApp() {
         const res = await DeviceOrientationEvent.requestPermission();
         if (res === 'granted') {
             window.addEventListener('deviceorientation', handleMotion, true);
-            btnStart.style.visibility = 'hidden'; // Schová tlačítko po aktivaci
+            btnStart.style.visibility = 'hidden';
         }
     } else {
         window.addEventListener('deviceorientation', handleMotion, true);
