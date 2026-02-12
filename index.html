@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Krušné hory AR – Procházka</title>
+<title>AR Lesní cesta – Krušné hory</title>
 <style>
   body { margin:0; overflow:hidden; background:black; font-family: sans-serif; }
   video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; z-index:0; }
@@ -13,17 +13,15 @@
     z-index:2; text-align: center; width: 80%;
   }
   button {
-    padding:15px 30px; background:#2ecc71; color:white; border:none;
+    padding:15px 30px; background:#27ae60; color:white; border:none;
     border-radius: 50px; font-size:18px; font-weight: bold; cursor: pointer;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
   }
 </style>
 </head>
 <body>
 
 <div id="overlay">
-  <button id="start">Vstoupit do krajiny</button>
-  <p style="color:white; margin-top:10px;">Povolte přístup k fotoaparátu a senzorům</p>
+  <button id="start">Vstoupit do lesa</button>
 </div>
 <video id="camera" autoplay playsinline></video>
 
@@ -34,120 +32,122 @@ const video = document.getElementById("camera");
 const startBtn = document.getElementById("start");
 const overlay = document.getElementById("overlay");
 
-let scene, camera, renderer, mountains;
+let scene, camera, renderer, worldGroup;
+let trees = [];
+const treeCount = 40;
+const moveSpeed = 0.05; // Rychlost chůze
 
-// Funkce pro aktivaci senzorů na iOS
 async function requestPermissions() {
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    const response = await DeviceOrientationEvent.requestPermission();
-    if (response !== 'granted') {
-      alert('Bez přístupu k senzorům nebude AR fungovat.');
-      return false;
-    }
+    return await DeviceOrientationEvent.requestPermission() === 'granted';
   }
   return true;
 }
 
 startBtn.onclick = async () => {
-  const granted = await requestPermissions();
-  if (!granted) return;
-
-  overlay.style.display = "none";
-
-  // Spuštění kamery
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment" },
-      audio: false
-    });
-    video.srcObject = stream;
-  } catch (err) {
-    console.error("Chyba kamery:", err);
+  if (await requestPermissions()) {
+    overlay.style.display = "none";
+    startCamera();
+    initThree();
+    animate();
   }
-
-  initThree();
-  setupOrientation();
-  animate();
 };
+
+function startCamera() {
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+    .then(stream => { video.srcObject = stream; })
+    .catch(err => console.error(err));
+}
 
 function initThree() {
   scene = new THREE.Scene();
-  
-  // Přidáme mlhu pro pocit hloubky
-  scene.fog = new THREE.FogExp2(0x000000, 0.15);
-
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  // Pozice kamery (tvoje oči)
-  camera.position.set(0, 0, 0);
-
+  
   renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
   const light = new THREE.HemisphereLight(0xffffff, 0x444444, 2);
   scene.add(light);
 
-  mountains = createMountains();
-  // Posuneme hory pod nás
-  mountains.position.y = -2; 
-  scene.add(mountains);
-}
+  // Skupina pro celý svět, aby se nám lépe hýbalo
+  worldGroup = new THREE.Group();
+  scene.add(worldGroup);
 
-function createMountains(){
-  // Uděláme krajinu mnohem větší (50x50)
-  const geometry = new THREE.PlaneGeometry(60, 60, 128, 128);
-  geometry.rotateX(-Math.PI/2);
+  // Vytvoření cesty
+  const roadGeo = new THREE.PlaneGeometry(4, 200);
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x444444, side: THREE.DoubleSide });
+  const road = new THREE.Mesh(roadGeo, roadMat);
+  road.rotation.x = -Math.PI / 2;
+  road.position.y = -1.6; // Výška pod nohama
+  worldGroup.add(road);
 
-  const pos = geometry.attributes.position;
-  for(let i=0; i<pos.count; i++){
-    const x = pos.getX(i);
-    const z = pos.getZ(i);
-
-    // Perlinův šum (jednoduchá verze přes sin/cos) pro Krušné hory
-    const height = 
-      Math.sin(x * 0.3) * 0.8 + 
-      Math.cos(z * 0.3) * 0.8 + 
-      Math.sin(x * 0.8 + z * 0.8) * 0.4;
-    
-    pos.setY(i, height);
+  // Vytvoření stromů
+  for(let i=0; i<treeCount; i++) {
+    const tree = createTree();
+    resetTree(tree, true); // Rozmístit náhodně po délce
+    trees.push(tree);
+    worldGroup.add(tree);
   }
-  geometry.computeVertexNormals();
 
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x3a5a40,
-    wireframe: false, // Zkus přepnout na true pro sci-fi efekt
-    flatShading: true
-  });
-
-  return new THREE.Mesh(geometry, material);
-}
-
-function setupOrientation() {
-  window.addEventListener("deviceorientation", (event) => {
-    // Převod orientace telefonu na rotaci Three.js kamery
-    // Alpha = kolem osy Z, Beta = kolem osy X, Gamma = kolem osy Y
-    const alpha = event.alpha ? THREE.MathUtils.degToRad(event.alpha) : 0;
-    const beta = event.beta ? THREE.MathUtils.degToRad(event.beta) : 0;
-    const gamma = event.gamma ? THREE.MathUtils.degToRad(event.gamma) : 0;
-
-    // Jednoduchý orientační model pro AR (v reálu by se použil Sensor API nebo Quaternion)
+  // Senzory pro iOS
+  window.addEventListener("deviceorientation", (e) => {
+    const alpha = e.alpha ? THREE.MathUtils.degToRad(e.alpha) : 0;
+    const beta = e.beta ? THREE.MathUtils.degToRad(e.beta) : 0;
+    const gamma = e.gamma ? THREE.MathUtils.degToRad(e.gamma) : 0;
     camera.rotation.set(beta, gamma, alpha, 'YXZ');
   });
 }
 
-function animate(){
+function createTree() {
+  const group = new THREE.Group();
+  
+  // Kmen
+  const trunkGeo = new THREE.CylinderGeometry(0.15, 0.2, 2, 8);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037 });
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+  trunk.position.y = 1; 
+  group.add(trunk);
+
+  // Koruna
+  const leavesGeo = new THREE.ConeGeometry(0.8, 2.5, 8);
+  const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2d5a27 });
+  const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+  leaves.position.y = 2.5;
+  group.add(leaves);
+
+  return group;
+}
+
+function resetTree(tree, randomZ = false) {
+  // Stromy dáváme vlevo nebo vpravo od cesty (cesta má šířku 4)
+  const side = Math.random() > 0.5 ? 1 : -1;
+  tree.position.x = (2.5 + Math.random() * 5) * side;
+  tree.position.y = -1.6;
+  // Pokud je to na začátku, rozhodíme je po celé délce, jinak je dáváme na konec horizontu
+  tree.position.z = randomZ ? (Math.random() * -150) : -150;
+}
+
+function animate() {
   requestAnimationFrame(animate);
+
+  // Simulace chůze: Posouváme stromy a cestu směrem k nám
+  trees.forEach(tree => {
+    tree.position.z += moveSpeed;
+    // Pokud strom zmizí za námi, pošleme ho zase dopředu
+    if (tree.position.z > 10) {
+      resetTree(tree);
+    }
+  });
+
   renderer.render(scene, camera);
 }
 
-// Responzivita při otočení telefonu
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
 </script>
 </body>
 </html>
