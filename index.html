@@ -2,118 +2,128 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>AR FIX - OPRAVA KAMERY</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obnova turistické chaty u Rabštejna nad Střelou</title>
+    <link rel="stylesheet" href="/POUTNICI/style.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
-        body { margin: 0; overflow: hidden; background: #000; }
-        video { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            object-fit: cover; z-index: 0;
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Poppins', sans-serif;
+            background: #000;
+            overflow: hidden;
         }
-        canvas { position: fixed; top: 0; left: 0; z-index: 1; pointer-events: none; }
-        #start {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            z-index: 10; padding: 25px 50px; background: #ff3b30; color: white; 
-            border: none; border-radius: 15px; font-size: 24px; font-weight: bold;
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .arrow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 100px;
+            color: red;
+            pointer-events: none;
+            user-select: none;
+            text-shadow: 2px 2px 5px black;
+        }
+
+        header, footer {
+            position: absolute;
+            width: 100%;
+            left: 0;
+            color: white;
+            z-index: 10;
+        }
+
+        header {
+            top: 0;
+            padding: 10px;
+        }
+
+        footer {
+            bottom: 0;
+            padding: 10px;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .footer-contacts a {
+            margin-right: 20px;
+            color: white;
+            text-decoration: none;
+        }
+
+        .footer-support-bar {
+            margin-top: 5px;
+        }
+
+        .copy-message {
+            margin-left: 10px;
+            font-size: 0.9em;
+            color: #0f0;
         }
     </style>
 </head>
 <body>
 
-    <button id="start">SPUSTIT KAMERU A AR</button>
-    <video id="camera" autoplay playsinline muted></video>
+    <header class="header">
+        <a href="https://www.facebook.com/T.O.Poutnici" target="_blank">
+            <img src="/POUTNICI/poutnici.png" alt="Logo Poutníci" class="logo" style="height:50px;">
+        </a>
+    </header>
 
-    <script type="module">
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160/build/three.module.js';
+    <div class="camera-container">
+        <video id="cameraStream" autoplay playsinline></video>
+        <div class="arrow">⬆️</div>
+    </div>
 
-        const startBtn = document.getElementById("start");
-        const video = document.getElementById("camera");
-        let scene, camera, renderer, arrow;
-        let isAnchored = false;
+    <footer class="footer">
+        <div class="footer-contacts">
+            <a href="https://www.facebook.com/obnovachatySTRELAZebrak" target="_blank">Facebook</a>
+            <a href="https://strelazebrak.cz/chata/" target="_blank">Web</a>
+        </div>
+        <div class="footer-support-bar">
+            Číslo účtu pro podporu: 
+            <strong id="accountNumber" onclick="copyAccount()">2402938869 / 2010</strong>
+            <span id="copyMessage" class="copy-message"></span>
+        </div>
+    </footer>
 
-        startBtn.onclick = async () => {
-            // 1. Povolení senzorů (iOS)
-            if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                await DeviceOrientationEvent.requestPermission();
-            }
+    <script>
+        const video = document.getElementById('cameraStream');
 
-            // 2. Spuštění kamery - opraveno pro Safari
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" }, 
-                    audio: false 
-                });
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+            .then(stream => {
                 video.srcObject = stream;
-                // Vynucené přehrávání pro iOS
-                await video.play();
-            } catch (err) {
-                alert("Kameru se nepodařilo spustit. Ujistěte se, že používáte HTTPS a Safari.");
-                console.error(err);
-            }
+            })
+            .catch(err => {
+                console.error("Chyba při přístupu ke kameře: ", err);
+                alert("Nepodařilo se získat přístup ke kameře.");
+            });
 
-            startBtn.style.display = "none";
-            initThreeJS();
-        };
-
-        function initThreeJS() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-
-            renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            document.body.appendChild(renderer.domElement);
-
-            // Světlo
-            scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-
-            // VELKÁ ČERVENÁ ŠIPKA
-            const geometry = new THREE.ConeGeometry(0.8, 2.5, 32);
-            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-            arrow = new THREE.Mesh(geometry, material);
-            
-            // Položit a otočit hrotem vpřed
-            arrow.rotation.x = Math.PI / 2;
-            
-            // Sledování orientace
-            window.addEventListener('deviceorientation', (e) => {
-                let heading = e.webkitCompassHeading || (360 - e.alpha);
-                const a = THREE.MathUtils.degToRad(heading);
-                const b = THREE.MathUtils.degToRad(e.beta);
-                const g = THREE.MathUtils.degToRad(e.gamma);
-
-                // Nastavení kamery
-                camera.rotation.set(b, g, -a, 'YXZ');
-
-                // Kotvení šipky na podlahu 3m před vás
-                if (!isAnchored) {
-                    const forward = new THREE.Vector3(0, 0, -3);
-                    forward.applyQuaternion(camera.quaternion);
-                    
-                    // Umístění: x, z podle pohledu, y: -1.6 (zem)
-                    arrow.position.set(forward.x, -1.6, forward.z);
-                    // Šipka kouká směrem od nás
-                    arrow.lookAt(forward.x * 10, -1.6, forward.z * 10);
-                    
-                    scene.add(arrow);
-                    isAnchored = true;
-                }
-            }, true);
-
-            animate();
+        function copyAccount() {
+            const accountNumber = document.getElementById('accountNumber').innerText;
+            navigator.clipboard.writeText(accountNumber).then(() => {
+                const msg = document.getElementById('copyMessage');
+                msg.textContent = "Zkopírováno!";
+                setTimeout(() => msg.textContent = "", 2000);
+            });
         }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            renderer.render(scene, camera);
-        }
-
-        // Responzivita
-        window.onresize = () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        };
     </script>
+
 </body>
 </html>
