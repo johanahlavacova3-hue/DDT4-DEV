@@ -3,130 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Obnova turistické chaty u Rabštejna nad Střelou</title>
-    <link rel="stylesheet" href="/POUTNICI/style.css">
-    
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
-
+    <title>Kompas Vizuál</title>
     <style>
-        body, html {
+        body {
             margin: 0;
             padding: 0;
-            height: 100%;
-            font-family: 'Poppins', sans-serif;
-            background: #000;
-            overflow: hidden;
-        }
-
-        .camera-container {
-            position: relative;
-            width: 100%;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             height: 100vh;
-            perspective: 1000px; /* perspektiva pro 3D efekt šipky */
+            font-family: sans-serif;
+            overflow: hidden;
+            color: #5eff5e;
         }
 
-        video {
+        /* Horní lišta s body */
+        #top-bar {
+            position: absolute;
+            top: 50px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .tick-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 20px;
+        }
+
+        /* Hlavní kruh a šipka */
+        #compass-container {
+            position: relative;
+            width: 250px;
+            height: 250px;
+            background-color: #1a241a;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #arrow-wrapper {
+            position: absolute;
             width: 100%;
             height: 100%;
-            object-fit: cover;
-            transform: scale(0.9) translateZ(-50px); /* kamera vzdálenější, přirozený pohled */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            /* Zde se bude dít rotace */
+            transition: transform 0.1s ease-out;
         }
 
         .arrow {
+            width: 0;
+            height: 0;
+            border-left: 30px solid transparent;
+            border-right: 30px solid transparent;
+            border-bottom: 50px solid #5eff5e;
+            margin-bottom: 5px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            background-color: #5eff5e;
+            border-radius: 50%;
+        }
+
+        button {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(3) translateZ(300px); 
-            /* větší šipka, vizuálně cca 3m před kamerou */
-            font-size: 100px;
-            color: red;
-            pointer-events: none;
-            user-select: none;
-            text-shadow: 2px 2px 5px black;
-        }
-
-        header, footer {
-            position: absolute;
-            width: 100%;
-            left: 0;
-            color: white;
-            z-index: 10;
-        }
-
-        header {
-            top: 0;
-            padding: 10px;
-        }
-
-        footer {
-            bottom: 0;
-            padding: 10px;
-            background: rgba(0,0,0,0.5);
-        }
-
-        .footer-contacts a {
-            margin-right: 20px;
-            color: white;
-            text-decoration: none;
-        }
-
-        .footer-support-bar {
-            margin-top: 5px;
-        }
-
-        .copy-message {
-            margin-left: 10px;
-            font-size: 0.9em;
-            color: #0f0;
+            bottom: 50px;
+            padding: 15px 30px;
+            background: #5eff5e;
+            border: none;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
 
-    <header class="header">
-        <a href="https://www.facebook.com/T.O.Poutnici" target="_blank">
-            <img src="sipka.png" alt="Logo" class="logo" style="height:50px;">
-        </a>
-    </header>
-
-    <div class="camera-container">
-        <video id="cameraStream" autoplay playsinline></video>
-        <div class="arrow">⬆️</div>
+    <div id="top-bar">
+        <div class="tick-container">
+            <span>·</span><span>▲</span><span>·</span><span>·</span><span>·</span><span>·</span><span>●</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span>
+        </div>
     </div>
 
-    <footer class="footer">
-        <div class="footer-contacts">
-            <a href="https://www.facebook.com/T.O.Poutnici" target="_blank">Facebook</a>
-            <a href="https://strelazebrak.cz/chata/" target="_blank">Web</a>
+    <div id="compass-container">
+        <div id="arrow-wrapper">
+            <div class="arrow"></div>
+            <div class="dot"></div>
         </div>
-        <div class="footer-support-bar">
-            Číslo účtu pro podporu: 
-            <strong id="accountNumber" onclick="copyAccount()">2402938869 / 2010</strong>
-            <span id="copyMessage" class="copy-message"></span>
-        </div>
-    </footer>
+    </div>
+
+    <button id="start-btn">Aktivovat gyroskop</button>
 
     <script>
-        const video = document.getElementById('cameraStream');
+        const arrowWrapper = document.getElementById('arrow-wrapper');
+        const startBtn = document.getElementById('start-btn');
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-            .then(stream => {
-                video.srcObject = stream;
-            })
-            .catch(err => {
-                console.error("Chyba při přístupu ke kameře: ", err);
-                alert("Nepodařilo se získat přístup ke kameře.");
-            });
-
-        function copyAccount() {
-            const accountNumber = document.getElementById('accountNumber').innerText;
-            navigator.clipboard.writeText(accountNumber).then(() => {
-                const msg = document.getElementById('copyMessage');
-                msg.textContent = "Zkopírováno!";
-                setTimeout(() => msg.textContent = "", 2000);
-            });
+        function handleOrientation(event) {
+            // alpha je rotace kolem osy Z (0 až 360 stupňů)
+            let alpha = event.alpha;
+            
+            if (alpha !== null) {
+                // Otáčíme šipkou proti pohybu telefonu, aby mířila stále "stejným směrem" v prostoru
+                arrowWrapper.style.transform = `rotate(${-alpha}deg)`;
+            }
         }
-    </script>
 
+        async function requestPermission() {
+            // Kontrola pro iOS zařízení (vyžadují povolení)
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceOrientationEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                        startBtn.style.display = 'none';
+                    } else {
+                        alert('Povolení bylo zamítnuto.');
+                    }
+                } catch (error) {
+                    console.error(error);
+                }
+            } else {
+                // Pro Android a ostatní, kteří nepotřebují speciální povolení
+                window.addEventListener('deviceorientation', handleOrientation);
+                startBtn.style.display = 'none';
+            }
+        }
+
+        startBtn.addEventListener('click', requestPermission);
+    </script>
 </body>
 </html>
