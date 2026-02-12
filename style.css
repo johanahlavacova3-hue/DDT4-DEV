@@ -22,45 +22,65 @@ body {
     display: none;
 }
 
-/* Horní lišta - zkrácené čárky */
+/* Rozmazané černé overlaye pro kameru */
+.cam-overlay {
+    position: fixed;
+    left: 0; width: 100%; height: 120px;
+    background: rgba(0, 0, 0, 0.25);
+    filter: blur(40px);
+    z-index: 1;
+    display: none;
+}
+.cam-overlay.top { top: -20px; }
+.cam-overlay.bottom { bottom: -20px; }
+
+body.camera-on .cam-overlay { display: block; }
+
+/* Horní lišta */
 #top-bar {
     position: absolute;
     top: 50px;
     width: 100%;
     display: flex;
     justify-content: center;
-    height: 20px;
+    z-index: 10;
 }
 
 #top-indicator {
     display: flex;
     align-items: center;
     gap: 18px;
-    color: #E2E2E2;
     transition: transform 0.1s linear;
 }
 
-.tick { font-size: 8px; transform: scaleY(0.5); }
-.dot-small { font-size: 10px; }
-.tri-small { font-size: 14px; }
+.tick { font-size: 8px; transform: scaleY(0.5); color: #E2E2E2; }
+.dot-small { font-size: 10px; color: #E2E2E2; }
+.tri-small { font-size: 14px; color: #04DC2B; } /* Zelený trojúhelník nahoře */
 
-/* Centrální UI */
+/* Centrální Kruh */
 #main-ui-container {
     display: flex;
     flex-direction: column;
     align-items: center;
     transform: translateY(-10px);
+    z-index: 10;
 }
 
 #compass-circle {
     width: 200px;
     height: 200px;
-    background-color: #122B17; /* barva ze zadání */
+    background-color: #122B17;
     border-radius: 50%;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background-color 0.3s ease;
+}
+
+/* Režim kamera - změna barvy kruhu */
+body.camera-on #compass-circle {
+    background-color: rgba(255, 255, 255, 0.8);
 }
 
 #arrow-pivot {
@@ -71,13 +91,14 @@ body {
     align-items: center;
 }
 
-/* Tvar trojúhelníku upraven podle obrázku */
+/* Rovnostranný trojúhelník */
 .arrow-head {
     width: 0; height: 0;
-    border-left: 20px solid transparent;
-    border-right: 20px solid transparent;
-    border-bottom: 55px solid #04DC2B; /* světle zelená */
-    transform: translateY(-38px);
+    /* Pro rovnostranný: výška = strana * (odmocnina ze 3 / 2) */
+    border-left: 27.5px solid transparent;
+    border-right: 27.5px solid transparent;
+    border-bottom: 47.6px solid #04DC2B; 
+    transform: translateY(-35px);
 }
 
 #center-dot {
@@ -95,7 +116,7 @@ body {
     border: none;
     border-radius: 25px;
     font-family: "bc-novatica", sans-serif;
-    font-size: 10pt;
+    font-size: 6pt; /* Velmi malé tlačítko */
     font-weight: 400;
     cursor: pointer;
     display: flex;
@@ -103,39 +124,24 @@ body {
     justify-content: center;
 }
 
-/* Spodní barva a text */
+/* Spodní bar */
 #bottom-bar {
     position: absolute;
     bottom: 35px;
-    width: calc(100% - 70px); /* Padding od krajů */
-    max-width: 500px;
+    width: calc(100% - 70px);
     display: flex;
     justify-content: space-between;
-    align-items: flex-end; /* Zarovnání na spodek tlačítka */
+    align-items: flex-end;
+    z-index: 10;
 }
 
-#location-text {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.1;
-}
-
-.label {
-    color: #FFFFFF;
-    font-size: 20pt;
-    font-weight: 400;
-}
-
-.place {
-    color: #04DC2B;
-    font-size: 20pt;
-    font-weight: 400;
-}
+#location-text { display: flex; flex-direction: column; line-height: 1.1; }
+.label { color: #FFFFFF; font-size: 20pt; }
+.place { color: #04DC2B; font-size: 20pt; }
 
 /* Přepínač */
 #mode-toggle {
-    width: 120px;
-    height: 15px;
+    width: 120px; height: 15px;
     background: rgba(4, 220, 43, 0.2);
     border-radius: 25px;
     cursor: pointer;
